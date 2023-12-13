@@ -6,6 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hyper = { version = "1.0.1", features = ["server"] }
-tokio = { version = "1.35.0", features = ["full"] }
-hyper-rustls = "0.24.2"
+hyper = "0.12.35"
+hyper-router = "0.5.0"
+tokio = "0.1.22"
+tokio-rustls = "0.10.1"
+rustls = "0.16.0"
+x509-parser = "0.15.1"
+tokio-tcp = "0.1.4"
