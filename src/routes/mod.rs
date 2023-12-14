@@ -5,19 +5,20 @@ use hyper::{Body, Request, Response, StatusCode};
 use rustls::Certificate;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use crate::io_err;
+use crate::qkd_manager::QkdManager;
 
 
 pub trait Routes {
-    fn handle_request(req: Request<Body>, client_cert: Option<&Certificate>) -> Response<Body>;
+    fn handle_request(req: Request<Body>, client_cert: Option<&Certificate>, qkd_manager: QkdManager) -> Response<Body>;
 }
 
 pub struct QKDKMERoutes {}
 
 impl Routes for QKDKMERoutes {
-    fn handle_request(req: Request<Body>, client_cert: Option<&Certificate>) -> Response<Body> {
+    fn handle_request(req: Request<Body>, client_cert: Option<&Certificate>, qkd_manager: QkdManager) -> Response<Body> {
         let path = req.uri().path().to_owned();
 
-        let rcx = match RequestContext::new(client_cert) {
+        let rcx = match RequestContext::new(client_cert, qkd_manager) {
             Ok(context) => context,
             Err(e) => {
                 eprintln!("Error creating context: {}", e.to_string());
@@ -57,18 +58,20 @@ impl QKDKMERoutes {
 
 struct RequestContext<'a> {
     client_cert: Option<X509Certificate<'a>>,
+    qkd_manager: QkdManager,
 }
 
 #[allow(dead_code)]
 impl<'a> RequestContext<'a> {
-    pub(crate) fn new(client_cert: Option<&'a Certificate>) -> Result<Self, io::Error> {
+    pub(crate) fn new(client_cert: Option<&'a Certificate>, qkd_manager: QkdManager) -> Result<Self, io::Error> {
         Ok(Self {
             client_cert: match client_cert {
                 None => None,
                 Some(cert) => {
                     Some(X509Certificate::from_der(cert.as_ref()).map_err(|_| io_err("Invalid client certificate"))?.1)
                 }
-            }
+            },
+            qkd_manager,
         })
     }
 
@@ -92,6 +95,11 @@ impl<'a> RequestContext<'a> {
     fn get_client_certificate_serial_as_string(&self) -> Result<String, io::Error> {
         let cert = self.certificate_or_error()?;
         Ok(cert.raw_serial_as_string())
+    }
+
+    fn get_client_certificate_serial_as_raw(&self) -> Result<&[u8], io::Error> {
+        let cert = self.certificate_or_error()?;
+        Ok(cert.raw_serial())
     }
 
     fn certificate_or_error(&self) -> Result<&X509Certificate, io::Error> {

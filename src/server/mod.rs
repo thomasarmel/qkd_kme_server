@@ -17,6 +17,7 @@ use tokio::prelude::{Future, Stream};
 use tokio_rustls::rustls::{AllowAnyAuthenticatedClient, RootCertStore, ServerConfig, Session};
 use tokio_rustls::TlsAcceptor;
 use crate::io_err;
+use crate::qkd_manager::QkdManager;
 use crate::server::certificates::{load_cert, load_pkey};
 
 pub struct Server {
@@ -27,7 +28,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn run<T: crate::routes::Routes>(&self) -> Result<(), io::Error> {
+    pub fn run<T: crate::routes::Routes>(&self, qkd_manager: &QkdManager) -> Result<(), io::Error> {
         let addr = self.listen_addr.parse().map_err(|e| {
             io_err(&format!(
                 "invalid listen address {:?}: {:?}",
@@ -43,7 +44,10 @@ impl Server {
             ))
         })?;
 
+        let qkd_manager = qkd_manager.clone();
+
         let future = socket.incoming().for_each(move |tcp_stream| {
+            let qkd_manager = qkd_manager.clone();
             let handler = acceptor
                 .accept(tcp_stream) // Decrypts the TCP stream
                 .and_then(move |tls_stream| {
@@ -59,24 +63,13 @@ impl Server {
                         Some(mut peer_certs) => peer_certs.remove(0), // Get the first cert
                     };
 
-                    /*let (_, cert) = X509Certificate::from_der(client_cert.as_ref()).map_err(|_| {
-                        io_err("invalid X.509 peer certificate")
-                    })?;
-                    let cert_subject = cert.subject();
-                    println!("{:?}", cert.raw_serial_as_string());
-                    let cn_entry = cert_subject.iter_common_name().next().ok_or_else(|| {
-                        io_err("peer certificate does not contain a subject commonName")
-                    })?;
-                    let cn = cn_entry.as_str().map_err(|_| {
-                        io_err("peer certificate commonName is not valid UTF-8")
-                    })?;*/
-
                     Ok((tls_stream, client_cert))
                 })
                 .and_then(move |(tls_stream, cert)| {
+                    let qkd_manager = qkd_manager.clone();
                     // Create a Hyper service to handle HTTP
                     let service = service_fn_ok(move |req| {
-                        T::handle_request(req, Some(&cert))
+                        T::handle_request(req, Some(&cert), qkd_manager.clone())
                     });
 
                     // Use the Hyper service using the decrypted stream
