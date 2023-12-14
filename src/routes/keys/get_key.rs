@@ -8,9 +8,12 @@ pub(in crate::routes) fn route_get_status(rcx: &RequestContext, req: Request<Bod
         Ok(response) => match response {
             QkdManagerResponse::Key(key) => key,
             _ => {
-                return Response::new(Body::from(format!("Error getting key for SAE {}", slave_sae_id)));
+                return super::QKDKMERoutes::internal_server_error();
             }
         },
+        Err(QkdManagerResponse::AuthenticationError) => {
+            return super::QKDKMERoutes::authentication_error();
+        }
         Err(_) => {
             return Response::new(Body::from(format!("Error getting key for SAE {}", slave_sae_id)));
         }
