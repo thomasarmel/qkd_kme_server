@@ -1,13 +1,12 @@
 mod keys;
 mod request_context;
-mod http_response_body;
 
 use request_context::RequestContext;
 
 use hyper::{Body, Request, Response, StatusCode};
 use rustls::Certificate;
-use crate::qkd_manager::QkdManager;
-use crate::routes::http_response_body::HttpResponseBody;
+use crate::qkd_manager::{http_response_obj, QkdManager};
+use crate::qkd_manager::http_response_obj::HttpResponseBody;
 
 
 pub trait Routes {
@@ -43,8 +42,9 @@ impl Routes for QKDKMERoutes {
 
 #[allow(dead_code)]
 impl QKDKMERoutes {
+    // TODO: macro would be cleaner :)
     fn internal_server_error() -> Response<Body> {
-        let error_body = http_response_body::ResponseError {
+        let error_body = http_response_obj::ResponseError {
             message: String::from("Internal server error"),
         };
         Response::builder()
@@ -54,7 +54,7 @@ impl QKDKMERoutes {
     }
 
     fn not_found() -> Response<Body> {
-        let error_body = http_response_body::ResponseError {
+        let error_body = http_response_obj::ResponseError {
             message: String::from("Element not found"),
         };
         Response::builder()
@@ -64,7 +64,7 @@ impl QKDKMERoutes {
     }
 
     fn authentication_error() -> Response<Body> {
-        let error_body = http_response_body::ResponseError {
+        let error_body = http_response_obj::ResponseError {
             message: String::from("Authentication error"),
         };
         Response::builder()

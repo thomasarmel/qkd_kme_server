@@ -45,9 +45,11 @@ impl<'a> RequestContext<'a> {
         Ok(cert.raw_serial_as_string())
     }
 
-    pub(crate) fn get_client_certificate_serial_as_raw(&self) -> Result<&[u8], io::Error> {
+    pub(crate) fn get_client_certificate_serial_as_raw(&self) -> Result<&[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], io::Error> {
         let cert = self.certificate_or_error()?;
-        Ok(cert.raw_serial())
+        Ok(<&[u8; 20]>::try_from(cert.raw_serial()).map_err(|_| {
+            io_err("Invalid client certificate serial")
+        })?)
     }
 
     fn certificate_or_error(&self) -> Result<&X509Certificate, io::Error> {
