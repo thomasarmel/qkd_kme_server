@@ -3,6 +3,7 @@ pub(crate) mod http_response_obj;
 
 use std::thread;
 use sha1::Digest;
+use crate::qkd_manager::http_response_obj::ResponseQkdKeysList;
 use crate::qkd_manager::QkdManagerResponse::TransmissionError;
 
 #[derive(Clone)]
@@ -38,22 +39,19 @@ impl QkdManager {
         }
     }
 
-    /*pub fn get_qkd_key(&self, sae_id: &str, auth_client_cert_serial: &[u8]) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        self.command_tx.send(QkdManagerCommand::GetKey(String::from(sae_id))).map_err(|_| {
+    pub fn get_qkd_key(&self, target_sae_id: i64, auth_client_cert_serial: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        self.command_tx.send(QkdManagerCommand::GetKeys(*auth_client_cert_serial, target_sae_id)).map_err(|_| {
             TransmissionError
         })?;
         match self.response_rx.recv().map_err(|_| {
             TransmissionError
         })? {
-            QkdManagerResponse::Key(key) => {
-                if key.auth_client_cert_serial != auth_client_cert_serial {
-                    return Err(QkdManagerResponse::AuthenticationError);
-                }
-                Ok(QkdManagerResponse::Key(key))
+            QkdManagerResponse::Keys(key) => {
+                Ok(QkdManagerResponse::Keys(key))
             },
             qkd_response_error => Err(qkd_response_error),
         }
-    }*/
+    }
 
     pub fn add_sae(&self, sae_id: i64, sae_certificate_serial: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Result<QkdManagerResponse, QkdManagerResponse> {
         self.command_tx.send(QkdManagerCommand::AddSae(sae_id, *sae_certificate_serial)).map_err(|_| {
@@ -114,7 +112,7 @@ impl QkdKey {
 
 enum QkdManagerCommand {
     AddKey(QkdKey),
-    GetKey(String),
+    GetKeys([u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], i64),
     GetStatus([u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], i64), // origin certificate + target id
     AddSae(i64, [u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]),
 }
@@ -126,6 +124,6 @@ pub enum QkdManagerResponse {
     Ko,
     TransmissionError,
     AuthenticationError,
-    Key(QkdKey),
+    Keys(ResponseQkdKeysList),
     Status(http_response_obj::ResponseQkdKeysStatus),
 }

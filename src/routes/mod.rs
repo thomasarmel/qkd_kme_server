@@ -72,4 +72,14 @@ impl QKDKMERoutes {
             .body(Body::from(error_body.to_json()))
             .unwrap()
     }
+
+    fn bad_request() -> Response<Body> {
+        let error_body = http_response_obj::ResponseError {
+            message: String::from("Bad request"),
+        };
+        Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(Body::from(error_body.to_json()))
+            .unwrap()
+    }
 }

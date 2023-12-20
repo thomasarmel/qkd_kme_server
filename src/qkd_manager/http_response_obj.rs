@@ -52,7 +52,7 @@ pub(crate) struct ResponseQkdKeysStatus {
 }
 impl HttpResponseBody for ResponseQkdKeysStatus {} // can't use Derive macro because of the generic constraint
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[allow(non_snake_case)]
 pub(crate) struct ResponseQkdKey {
     /// ID of the key: UUID format (example: "550e8400-e29b-41d4-a716-446655440000").
@@ -67,9 +67,9 @@ pub(crate) struct ResponseQkdKey {
     // key_extension -> to be implemented in the future
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub(crate) struct ResponseQkdKeysList {
     /// Array of keys. The number of keys is specified by the "number" parameter in "Get key". If not specified, the default number of keys is 1.
-    pub(crate) keys: Vec<String>,
+    pub(crate) keys: Vec<ResponseQkdKey>,
 }
 impl HttpResponseBody for ResponseQkdKeysList {}
