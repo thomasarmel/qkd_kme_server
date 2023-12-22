@@ -1,8 +1,11 @@
+use std::io;
 use serde::Serialize;
 
 pub(crate) trait HttpResponseBody where Self: serde::Serialize {
-    fn to_json(&self) -> String {
-        serde_json::to_string_pretty(&self).unwrap()
+    fn to_json(&self) -> Result<String, io::Error> {
+        Ok(serde_json::to_string_pretty(&self).map_err(|_| {
+            io::Error::new(io::ErrorKind::Other, "Error serializing HTTP response body")
+        })?)
     }
 }
 

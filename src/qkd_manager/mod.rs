@@ -2,7 +2,8 @@ mod key_handler;
 pub(crate) mod http_response_obj;
 pub(crate) mod http_request_obj;
 
-use std::thread;
+use std::{io, thread};
+use log::error;
 use sha1::Digest;
 use crate::qkd_manager::http_response_obj::ResponseQkdKeysList;
 use crate::qkd_manager::QkdManagerResponse::TransmissionError;
@@ -19,7 +20,13 @@ impl QkdManager {
         let (response_tx, response_rx) = crossbeam_channel::unbounded::<QkdManagerResponse>();
         let sqlite_db_path = String::from(sqlite_db_path);
         thread::spawn(move || {
-            let mut key_handler = key_handler::KeyHandler::new(&sqlite_db_path, command_rx, response_tx);
+            let mut key_handler = match key_handler::KeyHandler::new(&sqlite_db_path, command_rx, response_tx) {
+                Ok(handler) => handler,
+                Err(_) => {
+                    error!("Error creating key handler");
+                    return;
+                }
+            };
             key_handler.run();
         });
         Self {
@@ -104,20 +111,22 @@ pub struct QkdKey {
 impl QkdKey {
     const QKD_KEY_SIZE_BYTES: usize = crate::QKD_KEY_SIZE_BITS / 8;
 
-    pub fn new(origin_sae_id: i64, target_sae_id: i64, key: &[u8; Self::QKD_KEY_SIZE_BYTES]) -> Self {
-        Self {
+    pub fn new(origin_sae_id: i64, target_sae_id: i64, key: &[u8; Self::QKD_KEY_SIZE_BYTES]) -> Result<Self, io::Error> {
+        Ok(Self {
             origin_sae_id,
             target_sae_id,
             key: *key,
-            key_uuid: Self::generate_key_uuid(key),
-        }
+            key_uuid: Self::generate_key_uuid(key)?,
+        })
     }
 
-    fn generate_key_uuid(key: &[u8; Self::QKD_KEY_SIZE_BYTES]) -> uuid::Bytes {
+    fn generate_key_uuid(key: &[u8; Self::QKD_KEY_SIZE_BYTES]) -> Result<uuid::Bytes, io::Error> {
         let mut hasher = sha1::Sha1::new();
         hasher.update(key);
-        let hash_sub_bytes = uuid::Bytes::try_from(&hasher.finalize()[..16]).unwrap();
-        uuid::Builder::from_sha1_bytes(hash_sub_bytes).as_uuid().to_bytes_le()
+        let hash_sub_bytes = uuid::Bytes::try_from(&hasher.finalize()[..16]).map_err(|_| {
+            io::Error::new(io::ErrorKind::Other, "Error creating key UUID from key hash")
+        })?;
+        Ok(uuid::Builder::from_sha1_bytes(hash_sub_bytes).as_uuid().to_bytes_le())
     }
 
     pub fn get_uuid(&self) -> uuid::Bytes {
@@ -138,6 +147,7 @@ enum QkdManagerCommand {
 pub enum QkdManagerResponse {
     Ok,
     Ko,
+    NotFound,
     TransmissionError,
     AuthenticationError,
     Keys(ResponseQkdKeysList),

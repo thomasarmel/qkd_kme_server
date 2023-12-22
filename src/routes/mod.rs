@@ -10,7 +10,9 @@ use crate::qkd_manager::http_response_obj::HttpResponseBody;
 use async_trait::async_trait;
 use http_body_util::Full;
 use hyper::body::Bytes;
+use log::error;
 use rustls_pki_types::CertificateDer;
+use crate::RESPONSE_ERROR_FUNCTION;
 
 
 #[async_trait]
@@ -29,7 +31,7 @@ impl Routes for QKDKMERoutes {
         let rcx = match RequestContext::new(client_cert, qkd_manager) {
             Ok(context) => context,
             Err(e) => {
-                eprintln!("Error creating context: {}", e.to_string());
+                error!("Error creating context: {}", e.to_string());
                 return Self::internal_server_error();
             }
         };
@@ -49,32 +51,21 @@ impl Routes for QKDKMERoutes {
 
 #[allow(dead_code)]
 impl QKDKMERoutes {
-    // TODO: macro would be cleaner :)
-    fn internal_server_error() -> Result<Response<Full<Bytes>>, Infallible> {
-        let error_body = http_response_obj::ResponseError {
-            message: String::from("Internal server error"),
-        };
-        Ok(Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Full::new(Bytes::from(error_body.to_json()))).unwrap())
-    }
+    RESPONSE_ERROR_FUNCTION!(internal_server_error, "Internal server error");
+    RESPONSE_ERROR_FUNCTION!(not_found, "Element not found");
+    RESPONSE_ERROR_FUNCTION!(authentication_error, "Authentication error");
+    RESPONSE_ERROR_FUNCTION!(bad_request, "Bad request");
+}
 
-    fn not_found() -> Result<Response<Full<Bytes>>, Infallible> {
-        let error_body = http_response_obj::ResponseError {
-            message: String::from("Element not found"),
-        };
-        Ok(Response::builder().status(StatusCode::NOT_FOUND).body(Full::new(Bytes::from(error_body.to_json()))).unwrap())
-    }
-
-    fn authentication_error() -> Result<Response<Full<Bytes>>, Infallible> {
-        let error_body = http_response_obj::ResponseError {
-            message: String::from("Authentication error"),
-        };
-        Ok(Response::builder().status(StatusCode::UNAUTHORIZED).body(Full::new(Bytes::from(error_body.to_json()))).unwrap())
-    }
-
-    fn bad_request() -> Result<Response<Full<Bytes>>, Infallible> {
-        let error_body = http_response_obj::ResponseError {
-            message: String::from("Bad request"),
-        };
-        Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(Full::new(Bytes::from(error_body.to_json()))).unwrap())
+#[allow(non_snake_case)]
+#[macro_export]
+macro_rules! RESPONSE_ERROR_FUNCTION {
+    ($function_name:tt, $error_message:expr) => {
+        fn $function_name() -> Result<Response<Full<Bytes>>, Infallible> {
+            let error_body = http_response_obj::ResponseError {
+                message: String::from($error_message),
+            };
+            Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(Full::new(Bytes::from(error_body.to_json().unwrap()))).unwrap())
+        }
     }
 }

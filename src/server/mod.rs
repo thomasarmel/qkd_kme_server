@@ -13,6 +13,7 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 
 use hyper_util::rt::TokioIo;
+use log::{error, info, warn};
 use rustls::server::WebPkiClientVerifier;
 use rustls::{RootCertStore, ServerConfig};
 use tokio::net::TcpListener;
@@ -48,14 +49,20 @@ impl Server {
         //let qkd_manager = qkd_manager.clone();
 
         loop {
-            println!("Waiting for incoming connection");
+            info!("Waiting for incoming connection");
             let Ok(stream) = tls_acceptor.accept(socket.accept().await?.0).await else {
-                println!("Error accepting connection, maybe client certificate is missing?");
+                warn!("Error accepting connection, maybe client certificate is missing?");
                 continue;
             };
-            println!("Received connection from peer {}", stream.get_ref().0.peer_addr().unwrap());
+            info!("Received connection from peer {}", stream.get_ref().0.peer_addr().map_err(|_| {
+                io_err("Error getting peer address")
+            })?);
             let (_, server_session) = stream.get_ref();
-            let client_cert = Arc::new(server_session.peer_certificates().unwrap().first().unwrap().clone().into_owned());
+            let client_cert = Arc::new(server_session.peer_certificates()
+                .ok_or(io_err("Error: no client certificate, this is unexpected"))?
+                .first()
+                .ok_or(io_err("Error fetching client certificate, this is unexpected"))?
+                .clone().into_owned());
 
             let io = TokioIo::new(stream);
             let qkd_manager = qkd_manager.clone();
@@ -72,7 +79,7 @@ impl Server {
                     .serve_connection(io, response_service)
                     .await
                 {
-                    println!("Error serving connection: {:?}", err);
+                    error!("Error serving connection: {:?}", err);
                 }
             });
 
