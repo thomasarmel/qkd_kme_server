@@ -46,8 +46,6 @@ impl Server {
             ))
         })?;
 
-        //let qkd_manager = qkd_manager.clone();
-
         loop {
             info!("Waiting for incoming connection");
             let Ok(stream) = tls_acceptor.accept(socket.accept().await?.0).await else {

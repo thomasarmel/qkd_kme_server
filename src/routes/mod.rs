@@ -51,21 +51,59 @@ impl Routes for QKDKMERoutes {
 
 #[allow(dead_code)]
 impl QKDKMERoutes {
-    RESPONSE_ERROR_FUNCTION!(internal_server_error, "Internal server error");
-    RESPONSE_ERROR_FUNCTION!(not_found, "Element not found");
-    RESPONSE_ERROR_FUNCTION!(authentication_error, "Authentication error");
-    RESPONSE_ERROR_FUNCTION!(bad_request, "Bad request");
+    RESPONSE_ERROR_FUNCTION!(internal_server_error, StatusCode::INTERNAL_SERVER_ERROR, "Internal server error");
+    RESPONSE_ERROR_FUNCTION!(not_found, StatusCode::NOT_FOUND, "Element not found");
+    RESPONSE_ERROR_FUNCTION!(authentication_error, StatusCode::UNAUTHORIZED, "Authentication error");
+    RESPONSE_ERROR_FUNCTION!(bad_request, StatusCode::BAD_REQUEST, "Bad request");
 }
 
 #[allow(non_snake_case)]
 #[macro_export]
 macro_rules! RESPONSE_ERROR_FUNCTION {
-    ($function_name:tt, $error_message:expr) => {
+    ($function_name:tt, $status_code:expr, $error_message:expr) => {
         fn $function_name() -> Result<Response<Full<Bytes>>, Infallible> {
             let error_body = http_response_obj::ResponseError {
                 message: String::from($error_message),
             };
-            Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(Full::new(Bytes::from(error_body.to_json().unwrap()))).unwrap())
+            Ok(Response::builder().status($status_code).body(Full::new(Bytes::from(error_body.to_json().unwrap()))).unwrap())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use http_body_util::BodyExt;
+    use hyper::StatusCode;
+
+    #[tokio::test]
+    async fn test_internal_server_error() {
+        let response = super::QKDKMERoutes::internal_server_error().unwrap();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+        assert_eq!(body, "{\n  \"message\": \"Internal server error\"\n}");
+    }
+
+    #[tokio::test]
+    async fn test_not_found() {
+        let response = super::QKDKMERoutes::not_found().unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+        assert_eq!(body, "{\n  \"message\": \"Element not found\"\n}");
+    }
+
+    #[tokio::test]
+    async fn test_authentication_error() {
+        let response = super::QKDKMERoutes::authentication_error().unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+        assert_eq!(body, "{\n  \"message\": \"Authentication error\"\n}");
+    }
+
+    #[tokio::test]
+    async fn test_bad_request() {
+        let response = super::QKDKMERoutes::bad_request().unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+        assert_eq!(body, "{\n  \"message\": \"Bad request\"\n}");
     }
 }

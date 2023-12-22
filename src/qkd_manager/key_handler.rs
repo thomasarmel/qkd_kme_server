@@ -254,7 +254,7 @@ impl KeyHandler {
     }
 
     fn get_sae_id_from_certificate(&self, sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Option<i64> {
-        const PREPARED_STATEMENT: &'static str = "SELECT sae_id FROM saes WHERE sae_certificate_serial = ?;";
+        const PREPARED_STATEMENT: &'static str = "SELECT sae_id FROM saes WHERE sae_certificate_serial = ? LIMIT 1;";
         let mut stmt = match self.sqlite_db.prepare(PREPARED_STATEMENT) {
             Ok(stmt) => stmt,
             Err(_) => {
@@ -266,10 +266,14 @@ impl KeyHandler {
             error!("Error binding SAE certificate serial");
             ()
         }).ok();
-        stmt.next().map_err(|_| {
+        let sql_execution_state = stmt.next().map_err(|_| {
             error!("Error executing SQL statement");
             ()
         }).ok()?;
+        if sql_execution_state != sqlite::State::Row {
+            info!("SAE certificate not found in database");
+            return None;
+        }
         let sae_id: i64 = stmt.read::<i64, usize>(0).map_err(|_| {
             error!("Error reading SQL statement result");
             ()
@@ -288,5 +292,23 @@ macro_rules! ensure_prepared_statement_ok {
                 return Err(QkdManagerResponse::Ko);
             }
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_get_sae_id_from_certificate() {
+        let (_, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, _) = crossbeam_channel::unbounded();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx).unwrap();
+        let sae_id = 1;
+        let sae_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
+        key_handler.add_sae(sae_id, &sae_certificate_serial).unwrap();
+        assert_eq!(key_handler.get_sae_id_from_certificate(&sae_certificate_serial).unwrap(), sae_id);
+
+        let fake_sae_certificate_serial = [1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
+        assert_eq!(key_handler.get_sae_id_from_certificate(&fake_sae_certificate_serial), None);
     }
 }
