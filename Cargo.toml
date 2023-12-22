@@ -6,11 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hyper = "0.12.35"
-hyper-router = "0.5.0"
-tokio = "0.1.22"
-tokio-rustls = "0.10.1"
-rustls = "0.16.0"
+hyper = "1.1.0"
+http-body-util = "0.1.0"
+hyper-util = { version = "0.1.2", features = ["full"] }
+tokio = { version="1.35.1", features = ["full"] }
+tokio-rustls = "0.25.0"
+rustls = "0.22.1"
+rustls-pki-types = "1.0.1"
 x509-parser = "0.15.1"
 tokio-tcp = "0.1.4"
 crossbeam-channel = "0.5.9"
@@ -21,3 +23,6 @@ uuid = "1.6.1"
 rand = "0.8.5"
 sqlite = "0.32.0"
 base64 = "0.21.5"
+futures = "0.3.29"
+async-trait = "0.1.75"
+rustls-pemfile = "2.0.0"

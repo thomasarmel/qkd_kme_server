@@ -5,16 +5,17 @@ extern crate rustls;
 extern crate tokio;
 extern crate tokio_rustls;
 
-use std::fs::File;
 use std::io;
-use std::io::BufReader;
+use std::net::SocketAddr;
 use std::sync::Arc;
+use hyper::Request;
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
 
-use hyper::server::conn::Http;
-use hyper::service::service_fn_ok;
+use hyper_util::rt::TokioIo;
+use rustls::server::WebPkiClientVerifier;
+use rustls::{RootCertStore, ServerConfig};
 use tokio::net::TcpListener;
-use tokio::prelude::{Future, Stream};
-use tokio_rustls::rustls::{AllowAnyAuthenticatedClient, RootCertStore, ServerConfig, Session};
 use tokio_rustls::TlsAcceptor;
 use crate::io_err;
 use crate::qkd_manager::QkdManager;
@@ -28,80 +29,79 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn run<T: crate::routes::Routes>(&self, qkd_manager: &QkdManager) -> Result<(), io::Error> {
-        let addr = self.listen_addr.parse().map_err(|e| {
+    pub async fn run<T: crate::routes::Routes>(&self, qkd_manager: &QkdManager) -> Result<(), io::Error> {
+        let addr = self.listen_addr.parse::<SocketAddr>().map_err(|e| {
             io_err(&format!(
                 "invalid listen address {:?}: {:?}",
                 self.listen_addr, e
             ))
         })?;
         let config = self.get_ssl_config()?;
-        let acceptor = TlsAcceptor::from(Arc::new(config));
-        let socket = TcpListener::bind(&addr).map_err(|e| {
+        let tls_acceptor = TlsAcceptor::from(Arc::new(config));
+        let socket = TcpListener::bind(&addr).await.map_err(|e| {
             io_err(&format!(
                 "cannot bind to {:?}: {:?}",
                 self.listen_addr, e
             ))
         })?;
 
-        let qkd_manager = qkd_manager.clone();
+        //let qkd_manager = qkd_manager.clone();
 
-        let future = socket.incoming().for_each(move |tcp_stream| {
+        loop {
+            println!("Waiting for incoming connection");
+            let Ok(stream) = tls_acceptor.accept(socket.accept().await?.0).await else {
+                println!("Error accepting connection, maybe client certificate is missing?");
+                continue;
+            };
+            println!("Received connection from peer {}", stream.get_ref().0.peer_addr().unwrap());
+            let (_, server_session) = stream.get_ref();
+            let client_cert = Arc::new(server_session.peer_certificates().unwrap().first().unwrap().clone().into_owned());
+
+            let io = TokioIo::new(stream);
             let qkd_manager = qkd_manager.clone();
-            let handler = acceptor
-                .accept(tcp_stream) // Decrypts the TCP stream
-                .and_then(move |tls_stream| {
-                    let (tcp_stream, session) = tls_stream.get_ref();
-                    println!(
-                        "Received connection from peer {}",
-                        tcp_stream.peer_addr().unwrap()
-                    );
 
-                    // Get peer certificates from session
-                    let client_cert = match session.get_peer_certificates() {
-                        None => return Err(io_err("did not receive any peer certificates")),
-                        Some(mut peer_certs) => peer_certs.remove(0), // Get the first cert
-                    };
-
-                    Ok((tls_stream, client_cert))
-                })
-                .and_then(move |(tls_stream, cert)| {
+            tokio::task::spawn(async move {
+                let response_service = service_fn(|req: Request<hyper::body::Incoming>| {
+                    let local_client_cert_serial_str = Arc::clone(&client_cert);
                     let qkd_manager = qkd_manager.clone();
-                    // Create a Hyper service to handle HTTP
-                    let service = service_fn_ok(move |req| {
-                        T::handle_request(req, Some(&cert), qkd_manager.clone())
-                    });
-
-                    // Use the Hyper service using the decrypted stream
-                    let http = Http::new();
-                    http.serve_connection(tls_stream, service)
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+                    async move {
+                        T::handle_request(req, Some(&local_client_cert_serial_str), qkd_manager).await
+                    }
                 });
-            tokio::spawn(handler.map_err(|e| eprintln!("Error: {:}", e)));
-            Ok(())
-        });
+                if let Err(err) = http1::Builder::new()
+                    .serve_connection(io, response_service)
+                    .await
+                {
+                    println!("Error serving connection: {:?}", err);
+                }
+            });
 
-        Ok(tokio::run(future.map_err(drop)))
+        }
+
     }
 
     /// Load the SSL configuration for rustls
     fn get_ssl_config(&self) -> Result<ServerConfig, io::Error> {
         // Trusted CA for client certificates
         let mut roots = RootCertStore::empty();
-        let cafile = File::open(self.ca_client_cert_path.as_str()).map_err(|_| {
-            io_err("cannot open client CA certificate file")
+        let ca_cert_binding = load_cert(self.ca_client_cert_path.as_str())?;
+        let ca_cert = ca_cert_binding.first().ok_or(io_err("Invalid client CA certificate file"))?;
+        roots.add(ca_cert.clone()).map_err(|_| {
+            io_err("Error adding CA certificate")
         })?;
-        let mut reader = BufReader::new(cafile);
-        roots.add_pem_file(&mut reader).map_err(|_| {
-            io_err("invalid client CA certificate file")
+        let client_verifier = WebPkiClientVerifier::builder(roots.into()).build().map_err(|_| {
+            io_err("Error building client verifier")
         })?;
 
-        let mut config = ServerConfig::new(AllowAnyAuthenticatedClient::new(roots));
         let server_cert = load_cert(self.server_cert_path.as_str())?;
         let server_key = load_pkey(self.server_key_path.as_str())?.remove(0);
-        config
-            .set_single_cert(server_cert, server_key)
-            .map_err(|_| io_err("invalid server certificate or key"))?;
+
+        let config = ServerConfig::builder()
+            .with_client_cert_verifier(client_verifier)
+            .with_single_cert(server_cert, server_key)
+            .map_err(|_| {
+                io_err("Error building server configuration")
+            })?;
 
         Ok(config)
     }

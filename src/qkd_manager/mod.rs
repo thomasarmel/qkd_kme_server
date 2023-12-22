@@ -1,5 +1,6 @@
 mod key_handler;
 pub(crate) mod http_response_obj;
+pub(crate) mod http_request_obj;
 
 use std::thread;
 use sha1::Digest;
@@ -41,6 +42,20 @@ impl QkdManager {
 
     pub fn get_qkd_key(&self, target_sae_id: i64, auth_client_cert_serial: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Result<QkdManagerResponse, QkdManagerResponse> {
         self.command_tx.send(QkdManagerCommand::GetKeys(*auth_client_cert_serial, target_sae_id)).map_err(|_| {
+            TransmissionError
+        })?;
+        match self.response_rx.recv().map_err(|_| {
+            TransmissionError
+        })? {
+            QkdManagerResponse::Keys(key) => {
+                Ok(QkdManagerResponse::Keys(key))
+            },
+            qkd_response_error => Err(qkd_response_error),
+        }
+    }
+
+    pub fn get_qkd_keys_with_ids(&self, source_sae_id: i64, auth_client_cert_serial: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], keys_uuids: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        self.command_tx.send(QkdManagerCommand::GetKeysWithIds(*auth_client_cert_serial, source_sae_id, keys_uuids)).map_err(|_| {
             TransmissionError
         })?;
         match self.response_rx.recv().map_err(|_| {
@@ -113,6 +128,7 @@ impl QkdKey {
 enum QkdManagerCommand {
     AddKey(QkdKey),
     GetKeys([u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], i64),
+    GetKeysWithIds([u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], i64, Vec<String>),
     GetStatus([u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], i64), // origin certificate + target id
     AddSae(i64, [u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]),
 }

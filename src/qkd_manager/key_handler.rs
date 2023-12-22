@@ -21,7 +21,8 @@ impl KeyHandler {
         };
         key_handler.sqlite_db.execute(
             "CREATE TABLE IF NOT EXISTS keys (
-                    key_uuid BLOB PRIMARY KEY NOT NULL,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    key_uuid TEXT NOT NULL,
                     key BLOB NOT NULL,
                     origin_sae_id INTEGER NOT NULL,
                     target_sae_id INTEGER NOT NULL,
@@ -46,6 +47,10 @@ impl KeyHandler {
                             println!("Getting key for SAE ID {}", sae_id);
                             self.response_tx.send(self.get_sae_keys(&sae_certificate_serial, sae_id).unwrap_or_else(identity)).unwrap();
                         },
+                        QkdManagerCommand::GetKeysWithIds(sae_certificate_serial, master_sae_id, keys_uuids) => {
+                            println!("Getting keys from SAE ID {}", master_sae_id);
+                            self.response_tx.send(self.get_sae_keys_with_ids(&sae_certificate_serial, master_sae_id, keys_uuids).unwrap_or_else(identity)).unwrap();
+                        },
                         QkdManagerCommand::AddSae(sae_id, sae_certificate_serial) => {
                             println!("Adding SAE ID {}", sae_id);
                             self.response_tx.send(self.add_sae(sae_id, &sae_certificate_serial).unwrap_or_else(identity)).unwrap();
@@ -64,7 +69,7 @@ impl KeyHandler {
     }
 
     fn add_sae(&self, sae_id: i64, sae_certificate_serial: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        let mut stmt = self.sqlite_db.prepare("INSERT INTO saes (sae_id, sae_certificate_serial) VALUES (?, ?)").unwrap();
+        let mut stmt = self.sqlite_db.prepare("INSERT INTO saes (sae_id, sae_certificate_serial) VALUES (?, ?);").unwrap();
         stmt.bind((1, sae_id)).map_err(|_| {
             QkdManagerResponse::Ko
         })?;
@@ -78,8 +83,9 @@ impl KeyHandler {
     }
 
     fn add_key(&self, key: QkdKey) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        let mut stmt = self.sqlite_db.prepare("INSERT INTO keys (key_uuid, key, origin_sae_id, target_sae_id) VALUES (?, ?, ?, ?)").unwrap();
-        stmt.bind((1, key.key_uuid.as_bytes())).map_err(|_| {
+        let mut stmt = self.sqlite_db.prepare("INSERT INTO keys (key_uuid, key, origin_sae_id, target_sae_id) VALUES (?, ?, ?, ?);").unwrap();
+        let uuid_str = uuid::Uuid::from_bytes(Bytes::try_from(key.key_uuid).unwrap()).to_string();
+        stmt.bind((1, uuid_str.as_str())).map_err(|_| {
             QkdManagerResponse::Ko
         })?;
         stmt.bind((2, key.key.as_bytes())).map_err(|_| {
@@ -100,7 +106,7 @@ impl KeyHandler {
     fn get_sae_status(&self, origin_sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], target_sae_id: i64) -> Result<QkdManagerResponse, QkdManagerResponse> {
         let origin_sae_id = self.get_sae_id_from_certificate(origin_sae_certificate).ok_or(QkdManagerResponse::AuthenticationError)?;
 
-        let mut stmt = self.sqlite_db.prepare("SELECT COUNT(*) FROM keys WHERE target_sae_id = ? and origin_sae_id = ?").unwrap();
+        let mut stmt = self.sqlite_db.prepare("SELECT COUNT(*) FROM keys WHERE target_sae_id = ? and origin_sae_id = ?;").unwrap();
         stmt.bind((1, target_sae_id)).unwrap();
         stmt.bind((2, origin_sae_id)).unwrap();
         stmt.next().unwrap();
@@ -127,20 +133,44 @@ impl KeyHandler {
     fn get_sae_keys(&self, origin_sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], target_sae_id: i64) -> Result<QkdManagerResponse, QkdManagerResponse> {
         let origin_sae_id = self.get_sae_id_from_certificate(origin_sae_certificate).ok_or(QkdManagerResponse::AuthenticationError)?;
 
-        let mut stmt = self.sqlite_db.prepare("SELECT key_uuid, key FROM keys WHERE target_sae_id = ? and origin_sae_id = ? LIMIT 1").unwrap();
+        let mut stmt = self.sqlite_db.prepare("SELECT key_uuid, key FROM keys WHERE target_sae_id = ? and origin_sae_id = ? LIMIT 1;").unwrap();
         stmt.bind((1, target_sae_id)).unwrap();
         stmt.bind((2, origin_sae_id)).unwrap();
         stmt.next().unwrap();
-        let key_uuid: Vec<u8> = stmt.read::<Vec<u8>, usize>(0).unwrap();
+        let key_uuid: String = stmt.read::<String, usize>(0).unwrap();
         let key: Vec<u8> = stmt.read::<Vec<u8>, usize>(1).unwrap();
 
         let response_qkd_key = qkd_manager::http_response_obj::ResponseQkdKey {
-            key_ID: uuid::Uuid::from_bytes(Bytes::try_from(key_uuid).unwrap()).to_string(),
+            key_ID: key_uuid,
             key: general_purpose::STANDARD.encode(&key)
         };
 
         Ok(QkdManagerResponse::Keys(ResponseQkdKeysList {
             keys: vec![response_qkd_key],
+        }))
+    }
+
+    fn get_sae_keys_with_ids(&self, current_sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], origin_sae_id: i64, keys_uuids: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        let current_sae_id = self.get_sae_id_from_certificate(current_sae_certificate).ok_or(QkdManagerResponse::AuthenticationError)?;
+
+        let mut keys = Vec::new();
+
+        for key_uuid in keys_uuids.iter() {
+            let mut stmt = self.sqlite_db.prepare("SELECT key_uuid, key FROM keys WHERE target_sae_id = ? AND origin_sae_id = ? AND key_uuid = ?;").unwrap();
+            stmt.bind((1, current_sae_id)).unwrap();
+            stmt.bind((2, origin_sae_id)).unwrap();
+            stmt.bind((3, key_uuid.as_str())).unwrap();
+            while let sqlite::State::Row = stmt.next().unwrap() {
+                let key_uuid: String = stmt.read::<String, usize>(0).unwrap();
+                let key: Vec<u8> = stmt.read::<Vec<u8>, usize>(1).unwrap();
+                keys.push(qkd_manager::http_response_obj::ResponseQkdKey {
+                    key_ID: key_uuid,
+                    key: general_purpose::STANDARD.encode(&key)
+                });
+            };
+        }
+        Ok(QkdManagerResponse::Keys(ResponseQkdKeysList {
+            keys,
         }))
     }
 

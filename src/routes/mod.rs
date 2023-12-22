@@ -1,22 +1,29 @@
 mod keys;
 mod request_context;
 
+use std::convert::Infallible;
 use request_context::RequestContext;
 
-use hyper::{Body, Request, Response, StatusCode};
-use rustls::Certificate;
+use hyper::{body, Request, Response, StatusCode};
 use crate::qkd_manager::{http_response_obj, QkdManager};
 use crate::qkd_manager::http_response_obj::HttpResponseBody;
+use async_trait::async_trait;
+use http_body_util::Full;
+use hyper::body::Bytes;
+use rustls_pki_types::CertificateDer;
 
 
+#[async_trait]
 pub trait Routes {
-    fn handle_request(req: Request<Body>, client_cert: Option<&Certificate>, qkd_manager: QkdManager) -> Response<Body>;
+    async fn handle_request(req: Request<body::Incoming>, client_cert: Option<&CertificateDer>, qkd_manager: QkdManager) -> Result<Response<Full<Bytes>>, Infallible>;
 }
+
 
 pub struct QKDKMERoutes {}
 
+#[async_trait]
 impl Routes for QKDKMERoutes {
-    fn handle_request(req: Request<Body>, client_cert: Option<&Certificate>, qkd_manager: QkdManager) -> Response<Body> {
+    async fn handle_request(req: Request<body::Incoming>, client_cert: Option<&CertificateDer>, qkd_manager: QkdManager) -> Result<Response<Full<Bytes>>, Infallible> {
         let path = req.uri().path().to_owned();
 
         let rcx = match RequestContext::new(client_cert, qkd_manager) {
@@ -33,7 +40,7 @@ impl Routes for QKDKMERoutes {
             return Self::not_found();
         }
         match segments[2] {
-            "keys" => keys::key_handler(&rcx, req, &segments[3..]),
+            "keys" => keys::key_handler(&rcx, req, &segments[3..]).await,
             &_ => Self::not_found(),
         }
     }
@@ -43,43 +50,31 @@ impl Routes for QKDKMERoutes {
 #[allow(dead_code)]
 impl QKDKMERoutes {
     // TODO: macro would be cleaner :)
-    fn internal_server_error() -> Response<Body> {
+    fn internal_server_error() -> Result<Response<Full<Bytes>>, Infallible> {
         let error_body = http_response_obj::ResponseError {
             message: String::from("Internal server error"),
         };
-        Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(Body::from(error_body.to_json()))
-            .unwrap()
+        Ok(Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Full::new(Bytes::from(error_body.to_json()))).unwrap())
     }
 
-    fn not_found() -> Response<Body> {
+    fn not_found() -> Result<Response<Full<Bytes>>, Infallible> {
         let error_body = http_response_obj::ResponseError {
             message: String::from("Element not found"),
         };
-        Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(Body::from(error_body.to_json()))
-            .unwrap()
+        Ok(Response::builder().status(StatusCode::NOT_FOUND).body(Full::new(Bytes::from(error_body.to_json()))).unwrap())
     }
 
-    fn authentication_error() -> Response<Body> {
+    fn authentication_error() -> Result<Response<Full<Bytes>>, Infallible> {
         let error_body = http_response_obj::ResponseError {
             message: String::from("Authentication error"),
         };
-        Response::builder()
-            .status(StatusCode::UNAUTHORIZED)
-            .body(Body::from(error_body.to_json()))
-            .unwrap()
+        Ok(Response::builder().status(StatusCode::UNAUTHORIZED).body(Full::new(Bytes::from(error_body.to_json()))).unwrap())
     }
 
-    fn bad_request() -> Response<Body> {
+    fn bad_request() -> Result<Response<Full<Bytes>>, Infallible> {
         let error_body = http_response_obj::ResponseError {
             message: String::from("Bad request"),
         };
-        Response::builder()
-            .status(StatusCode::BAD_REQUEST)
-            .body(Body::from(error_body.to_json()))
-            .unwrap()
+        Ok(Response::builder().status(StatusCode::BAD_REQUEST).body(Full::new(Bytes::from(error_body.to_json()))).unwrap())
     }
 }

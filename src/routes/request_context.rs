@@ -1,5 +1,5 @@
 use std::io;
-use rustls::Certificate;
+use rustls_pki_types::CertificateDer;
 use x509_parser::certificate::X509Certificate;
 use x509_parser::prelude::FromDer;
 use crate::io_err;
@@ -12,7 +12,7 @@ pub(super) struct RequestContext<'a> {
 
 #[allow(dead_code)]
 impl<'a> RequestContext<'a> {
-    pub(crate) fn new(client_cert: Option<&'a Certificate>, qkd_manager: QkdManager) -> Result<Self, io::Error> {
+    pub(crate) fn new(client_cert: Option<&'a CertificateDer>, qkd_manager: QkdManager) -> Result<Self, io::Error> {
         Ok(Self {
             client_cert: match client_cert {
                 None => None,

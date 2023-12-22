@@ -4,7 +4,8 @@ use uuid::{Bytes};
 use qkd_kme_server::qkd_manager::QkdManager;
 use qkd_kme_server::routes::QKDKMERoutes;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let server = qkd_kme_server::server::Server {
         listen_addr: "127.0.0.1:3000".to_string(),
         ca_client_cert_path: "certs/CA-zone1.crt".to_string(),
@@ -31,7 +32,13 @@ fn main() {
         b"this_is_secret_key_1_of_32_bytes",
         )).unwrap();
 
-    server.run::<QKDKMERoutes>(&qkd_manager).unwrap();
+    qkd_manager.add_qkd_key(qkd_kme_server::qkd_manager::QkdKey::new(
+        1,
+        1,
+        b"this_is_secret_key_1_of_32_bytes",
+    )).unwrap();
+
+    server.run::<QKDKMERoutes>(&qkd_manager).await.unwrap();
 }
 
 fn mock_generate_random_qkd_key() -> Vec<u8> {
