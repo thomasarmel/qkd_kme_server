@@ -186,7 +186,7 @@ impl KeyHandler {
             QkdManagerResponse::Ko
         })?;
         if sql_execution_state != sqlite::State::Row {
-            return Err(QkdManagerResponse::NotFound);
+            return Err(QkdManagerResponse::NotFound); // TODO we could return an empty array instead
         }
         let key_uuid: String = stmt.read::<String, usize>(0).map_err(|_| {
             error!("Error reading SQL statement result");
@@ -298,6 +298,10 @@ macro_rules! ensure_prepared_statement_ok {
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+    use crate::qkd_manager::http_response_obj::HttpResponseBody;
+    use crate::qkd_manager::QkdManagerResponse;
+
     #[test]
     fn test_get_sae_id_from_certificate() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
@@ -310,5 +314,186 @@ mod tests {
 
         let fake_sae_certificate_serial = [1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
         assert_eq!(key_handler.get_sae_id_from_certificate(&fake_sae_certificate_serial), None);
+    }
+
+    #[test]
+    fn test_add_key() {
+        let (_, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, _) = crossbeam_channel::unbounded();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx).unwrap();
+        let key = crate::qkd_manager::QkdKey {
+            key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
+            key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
+            origin_sae_id: 1,
+            target_sae_id: 2,
+        };
+        key_handler.add_key(key).unwrap();
+    }
+
+    #[test]
+    fn test_get_sae_status() {
+        let (_, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, _) = crossbeam_channel::unbounded();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx).unwrap();
+        let sae_id = 1;
+        let sae_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
+        key_handler.add_sae(sae_id, &sae_certificate_serial).unwrap();
+        let qkd_manager_response = key_handler.get_sae_status(&sae_certificate_serial, sae_id).unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Status(_)));
+        let response_status = match qkd_manager_response {
+            QkdManagerResponse::Status(status) => status,
+            _ => {
+                panic!("Unexpected response");
+            }
+        };
+        assert_eq!(response_status.to_json().unwrap(), "{\n  \"source_KME_ID\": \"1\",\n  \"target_KME_ID\": \"?? TODO\",\n  \"master_SAE_ID\": \"1\",\n  \"slave_SAE_ID\": \"1\",\n  \"key_size\": 256,\n  \"stored_key_count\": 0,\n  \"max_key_count\": 10,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 256,\n  \"min_key_size\": 256,\n  \"max_SAE_ID_count\": 0\n}");
+
+
+        // add key for another SAE id
+        let key = crate::qkd_manager::QkdKey {
+            key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
+            key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
+            origin_sae_id: 1,
+            target_sae_id: 3,
+        };
+        key_handler.add_key(key).unwrap();
+        let qkd_manager_response = key_handler.get_sae_status(&sae_certificate_serial, 2).unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Status(_)));
+        let response_status = match qkd_manager_response {
+            QkdManagerResponse::Status(status) => status,
+            _ => {
+                panic!("Unexpected response");
+            }
+        };
+        assert_eq!(response_status.to_json().unwrap(), "{\n  \"source_KME_ID\": \"1\",\n  \"target_KME_ID\": \"?? TODO\",\n  \"master_SAE_ID\": \"1\",\n  \"slave_SAE_ID\": \"2\",\n  \"key_size\": 256,\n  \"stored_key_count\": 0,\n  \"max_key_count\": 10,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 256,\n  \"min_key_size\": 256,\n  \"max_SAE_ID_count\": 0\n}");
+
+        // add key
+        let key = crate::qkd_manager::QkdKey {
+            key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
+            key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
+            origin_sae_id: 1,
+            target_sae_id: 2,
+        };
+        key_handler.add_key(key).unwrap();
+        let qkd_manager_response = key_handler.get_sae_status(&sae_certificate_serial, 2).unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Status(_)));
+        let response_status = match qkd_manager_response {
+            QkdManagerResponse::Status(status) => status,
+            _ => {
+                panic!("Unexpected response");
+            }
+        };
+        assert_eq!(response_status.to_json().unwrap(), "{\n  \"source_KME_ID\": \"1\",\n  \"target_KME_ID\": \"?? TODO\",\n  \"master_SAE_ID\": \"1\",\n  \"slave_SAE_ID\": \"2\",\n  \"key_size\": 256,\n  \"stored_key_count\": 1,\n  \"max_key_count\": 10,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 256,\n  \"min_key_size\": 256,\n  \"max_SAE_ID_count\": 0\n}");
+    }
+
+    #[test]
+    fn test_get_sae_keys() {
+        let (_, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, _) = crossbeam_channel::unbounded();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx).unwrap();
+        let sae_id = 1;
+        let sae_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
+        key_handler.add_sae(sae_id, &sae_certificate_serial).unwrap();
+        let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, sae_id);
+        assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
+
+        // add key
+        let key = crate::qkd_manager::QkdKey {
+            key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
+            key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
+            origin_sae_id: 1,
+            target_sae_id: 2,
+        };
+        key_handler.add_key(key).unwrap();
+        let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, 2).unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
+        let response_keys = match qkd_manager_response {
+            QkdManagerResponse::Keys(keys) => keys,
+            _ => {
+                panic!("Unexpected response");
+            }
+        };
+        assert_eq!(response_keys.keys.len(), 1);
+        assert_eq!(response_keys.keys[0].key_ID, "00000000-0000-0000-0000-000000000000");
+        assert_eq!(response_keys.keys[0].key, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+        assert_eq!(response_keys.to_json().unwrap(), "{\n  \"keys\": [\n    {\n      \"key_ID\": \"00000000-0000-0000-0000-000000000000\",\n      \"key\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"\n    }\n  ]\n}");
+    }
+
+    #[test]
+    fn test_get_sae_keys_with_ids() {
+        let (_, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, _) = crossbeam_channel::unbounded();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx).unwrap();
+        let sae_id = 1;
+        let sae_1_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
+        let sae_2_certificate_serial = [1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
+        key_handler.add_sae(sae_id, &sae_1_certificate_serial).unwrap();
+        key_handler.add_sae(2, &sae_2_certificate_serial).unwrap();
+        let qkd_manager_response = key_handler.get_sae_keys_with_ids(&sae_1_certificate_serial, sae_id, vec!["00000000-0000-0000-0000-000000000000".to_string()]);
+        assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
+
+        // add key
+        let key = crate::qkd_manager::QkdKey {
+            key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
+            key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
+            origin_sae_id: 1,
+            target_sae_id: 2,
+        };
+        key_handler.add_key(key).unwrap();
+
+
+        let qkd_manager_response = key_handler.get_sae_keys_with_ids(&sae_2_certificate_serial, 1, vec!["00000000-0000-0000-0000-000000000000".to_string()]).unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
+        let response_keys = match qkd_manager_response {
+            QkdManagerResponse::Keys(keys) => keys,
+            _ => {
+                panic!("Unexpected response");
+            }
+        };
+        assert_eq!(response_keys.keys.len(), 1);
+        assert_eq!(response_keys.keys[0].key_ID, "00000000-0000-0000-0000-000000000000");
+        assert_eq!(response_keys.keys[0].key, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+
+        // Revert origin and target SAE IDs
+        let qkd_manager_response = key_handler.get_sae_keys_with_ids(&sae_1_certificate_serial, 2, vec!["00000000-0000-0000-0000-000000000000".to_string()]);
+        assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
+    }
+
+    #[test]
+    fn test_run() {
+        let (command_tx, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, response_rx) = crossbeam_channel::unbounded();
+        let mut key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx).unwrap();
+        let sae_id = 1;
+        let sae_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
+        let _ = thread::spawn(move || {
+            key_handler.run();
+        });
+        command_tx.send(super::QkdManagerCommand::AddSae(sae_id, sae_certificate_serial)).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
+
+        command_tx.send(super::QkdManagerCommand::GetKeys(sae_certificate_serial, sae_id)).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
+
+        // add key
+        let key = crate::qkd_manager::QkdKey {
+            key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
+            key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
+            origin_sae_id: 1,
+            target_sae_id: 2,
+        };
+        command_tx.send(super::QkdManagerCommand::AddKey(key)).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
+
+        command_tx.send(super::QkdManagerCommand::GetKeysWithIds(sae_certificate_serial, 1, vec!["00000000-0000-0000-0000-000000000000".to_string()])).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
+
+        command_tx.send(super::QkdManagerCommand::GetStatus(sae_certificate_serial, 2)).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Status(_)));
     }
 }
