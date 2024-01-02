@@ -34,11 +34,35 @@ pub(super) fn load_pkey(filename: &str) -> Result<Vec<PrivateKeyDer<'static>>, i
             match pk {
                 Ok(key) => {
                     Ok(PrivateKeyDer::from(PrivatePkcs8KeyDer::from(key.secret_pkcs8_der().to_vec())))
-                    //Ok(PrivateKeyDer::from(key))
                 },
                 Err(e) => Err(e)
             }
         })
         .collect::<Result<Vec<PrivateKeyDer>, _>>()?;
     Ok(keys)
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_load_cert() {
+        const CERT_FILENAME: &'static str = "certs/kme1.crt";
+        let certs = super::load_cert(CERT_FILENAME).unwrap();
+        assert_eq!(certs.len(), 1);
+
+        const CERT_FILENAME_NO_EXIST: &'static str = "certs/no_exist.crt";
+        let certs = super::load_cert(CERT_FILENAME_NO_EXIST);
+        assert!(certs.is_err());
+    }
+
+    #[test]
+    fn test_load_pkey() {
+        const PKEY_FILENAME: &'static str = "certs/kme1.key";
+        let keys = super::load_pkey(PKEY_FILENAME).unwrap();
+        assert_eq!(keys.len(), 1);
+
+        const PKEY_FILENAME_NO_EXIST: &'static str = "certs/no_exist.key";
+        let keys = super::load_pkey(PKEY_FILENAME_NO_EXIST);
+        assert!(keys.is_err());
+    }
 }

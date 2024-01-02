@@ -111,3 +111,31 @@ impl Server {
         Ok(config)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_get_ssl_config() {
+        const CA_CERT_FILENAME: &'static str = "certs/CA-zone1.crt";
+        const SERVER_CERT_FILENAME: &'static str = "certs/kme1.crt";
+        const SERVER_KEY_FILENAME: &'static str = "certs/kme1.key";
+        let server = super::Server {
+            listen_addr: "127.0.0.1:3000".to_string(),
+            ca_client_cert_path: CA_CERT_FILENAME.to_string(),
+            server_cert_path: SERVER_CERT_FILENAME.to_string(),
+            server_key_path: SERVER_KEY_FILENAME.to_string(),
+        };
+        let config = server.get_ssl_config();
+        assert!(config.is_ok());
+
+        const CA_CERT_FILE_WRONG_FORMAT: &'static str = "certs/sae1.pfx";
+        let server = super::Server {
+            listen_addr: "127.0.0.1:3000".to_string(),
+            ca_client_cert_path: CA_CERT_FILE_WRONG_FORMAT.to_string(),
+            server_cert_path: SERVER_CERT_FILENAME.to_string(),
+            server_key_path: SERVER_KEY_FILENAME.to_string(),
+        };
+        let config = server.get_ssl_config();
+        assert!(config.is_err());
+    }
+}

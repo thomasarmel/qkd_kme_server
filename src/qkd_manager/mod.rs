@@ -143,7 +143,7 @@ enum QkdManagerCommand {
 }
 
 #[allow(private_interfaces)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum QkdManagerResponse {
     Ok,
     Ko,
@@ -152,4 +152,84 @@ pub enum QkdManagerResponse {
     AuthenticationError,
     Keys(ResponseQkdKeysList),
     Status(http_response_obj::ResponseQkdKeysStatus),
+}
+
+
+#[cfg(test)]
+mod test {
+    use crate::CLIENT_CERT_SERIAL_SIZE_BYTES;
+
+    #[test]
+    fn test_add_qkd_key() {
+        const SQLITE_DB_PATH: &'static str = ":memory:";
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH);
+        let key = super::QkdKey::new(1, 2, &[0; super::QkdKey::QKD_KEY_SIZE_BYTES]).unwrap();
+        let response = qkd_manager.add_qkd_key(key);
+        assert!(response.is_ok());
+        assert_eq!(response.unwrap(), super::QkdManagerResponse::Ok);
+    }
+
+    #[test]
+    fn test_add_sae() {
+        const SQLITE_DB_PATH: &'static str = ":memory:";
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH);
+        let response = qkd_manager.add_sae(1, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        assert!(response.is_ok());
+        assert_eq!(response.unwrap(), super::QkdManagerResponse::Ok);
+    }
+
+    #[test]
+    fn test_get_qkd_key() {
+        const SQLITE_DB_PATH: &'static str = ":memory:";
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH);
+        qkd_manager.add_sae(1, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).unwrap();
+        qkd_manager.add_sae(2, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES]).unwrap();
+        let key = super::QkdKey::new(1, 2, &[0; super::QkdKey::QKD_KEY_SIZE_BYTES]).unwrap();
+        qkd_manager.add_qkd_key(key).unwrap();
+        let response = qkd_manager.get_qkd_key(2, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        assert!(response.is_err());
+        assert_eq!(response.unwrap_err(), super::QkdManagerResponse::NotFound);
+
+        let response = qkd_manager.get_qkd_key(2, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        assert!(response.is_ok());
+    }
+
+    #[test]
+    fn test_get_qkd_keys_with_ids() {
+        const SQLITE_DB_PATH: &'static str = ":memory:";
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH);
+        qkd_manager.add_sae(1, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).unwrap();
+        qkd_manager.add_sae(2, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES]).unwrap();
+        let key = super::QkdKey::new(1, 2, &[0; super::QkdKey::QKD_KEY_SIZE_BYTES]).unwrap();
+        let key_uuid = key.get_uuid();
+        let key_uuid_str = uuid::Uuid::from_bytes(key_uuid).to_string();
+        qkd_manager.add_qkd_key(key).unwrap();
+        let response = qkd_manager.get_qkd_keys_with_ids(2, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
+        assert!(response.is_err());
+        assert_eq!(response.unwrap_err(), super::QkdManagerResponse::NotFound);
+
+        let response = qkd_manager.get_qkd_keys_with_ids(1, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
+        assert!(response.is_ok());
+    }
+
+    #[test]
+    fn test_get_qkd_key_status() {
+        const SQLITE_DB_PATH: &'static str = ":memory:";
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH);
+        qkd_manager.add_sae(1, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).unwrap();
+        qkd_manager.add_sae(2, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES]).unwrap();
+        let key = super::QkdKey::new(1, 2, &[0; super::QkdKey::QKD_KEY_SIZE_BYTES]).unwrap();
+        qkd_manager.add_qkd_key(key).unwrap();
+        let response = qkd_manager.get_qkd_key_status(&[1; CLIENT_CERT_SERIAL_SIZE_BYTES], 2);
+        assert!(response.is_ok());
+        assert!(matches!(response.unwrap(), super::QkdManagerResponse::Status(_)));
+    }
+
+    #[test]
+    fn test_key_uuid() {
+        let key = super::QkdKey::new(1, 2, &[0; super::QkdKey::QKD_KEY_SIZE_BYTES]).unwrap();
+        let key_uuid = key.get_uuid();
+        let key_uuid_str = uuid::Uuid::from_bytes(key_uuid).to_string();
+        assert_eq!(key_uuid_str, "7b848ade-8cff-3d54-a9b8-53a215e6ee77");
+    }
 }

@@ -21,3 +21,13 @@ pub const MAX_QKD_KEYS_PER_SAE: usize = 10;
 pub const CLIENT_CERT_SERIAL_SIZE_BYTES: usize = 20;
 pub const MEMORY_SQLITE_DB_PATH: &'static str = ":memory:";
 pub const THIS_KME_ID: i64 = 1; // TODO: change
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_io_err() {
+        let err = super::io_err("test");
+        assert_eq!(err.kind(), std::io::ErrorKind::Other);
+        assert_eq!(err.to_string(), "test");
+    }
+}

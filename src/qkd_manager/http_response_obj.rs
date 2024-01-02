@@ -15,7 +15,7 @@ pub(crate) struct ResponseError {
 }
 impl HttpResponseBody for ResponseError {} // can't use Derive macro because of the generic constraint
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, PartialEq)]
 #[allow(non_snake_case)]
 /// Shall be called by master SAE to know if keys can be delivered to the slave SAE.
 pub(crate) struct ResponseQkdKeysStatus {
@@ -55,7 +55,7 @@ pub(crate) struct ResponseQkdKeysStatus {
 }
 impl HttpResponseBody for ResponseQkdKeysStatus {} // can't use Derive macro because of the generic constraint
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, PartialEq)]
 #[allow(non_snake_case)]
 pub(crate) struct ResponseQkdKey {
     /// ID of the key: UUID format (example: "550e8400-e29b-41d4-a716-446655440000").
@@ -70,9 +70,54 @@ pub(crate) struct ResponseQkdKey {
     // key_extension -> to be implemented in the future
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, PartialEq)]
 pub(crate) struct ResponseQkdKeysList {
     /// Array of keys. The number of keys is specified by the "number" parameter in "Get key". If not specified, the default number of keys is 1.
     pub(crate) keys: Vec<ResponseQkdKey>,
 }
 impl HttpResponseBody for ResponseQkdKeysList {}
+
+#[cfg(test)]
+mod test {
+    use crate::qkd_manager::http_response_obj::HttpResponseBody;
+
+    #[test]
+    fn test_serialize_response_error() {
+        let response_error = super::ResponseError {
+            message: "test".to_string(),
+        };
+        let response_error_json = response_error.to_json().unwrap();
+        assert_eq!(response_error_json, "{\n  \"message\": \"test\"\n}");
+    }
+
+    #[test]
+    fn test_serialize_response_qkd_keys_status() {
+        let response_qkd_keys_status = super::ResponseQkdKeysStatus {
+            source_KME_ID: "source_KME_ID".to_string(),
+            target_KME_ID: "target_KME_ID".to_string(),
+            master_SAE_ID: "master_SAE_ID".to_string(),
+            slave_SAE_ID: "slave_SAE_ID".to_string(),
+            key_size: 128,
+            stored_key_count: 1,
+            max_key_count: 1,
+            max_key_per_request: 1,
+            max_key_size: 128,
+            min_key_size: 128,
+            max_SAE_ID_count: 1,
+        };
+        let response_qkd_keys_status_json = response_qkd_keys_status.to_json().unwrap();
+        assert_eq!(response_qkd_keys_status_json, "{\n  \"source_KME_ID\": \"source_KME_ID\",\n  \"target_KME_ID\": \"target_KME_ID\",\n  \"master_SAE_ID\": \"master_SAE_ID\",\n  \"slave_SAE_ID\": \"slave_SAE_ID\",\n  \"key_size\": 128,\n  \"stored_key_count\": 1,\n  \"max_key_count\": 1,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 128,\n  \"min_key_size\": 128,\n  \"max_SAE_ID_count\": 1\n}");
+    }
+
+    #[test]
+    fn test_serialize_response_qkd_key_list() {
+        let response_qkd_key = super::ResponseQkdKey {
+            key_ID: "key_ID".to_string(),
+            key: "key".to_string(),
+        };
+        let response_qkd_key_list_json = super::ResponseQkdKeysList {
+            keys: vec![response_qkd_key],
+        }.to_json().unwrap();
+        assert_eq!(response_qkd_key_list_json, "{\n  \"keys\": [\n    {\n      \"key_ID\": \"key_ID\",\n      \"key\": \"key\"\n    }\n  ]\n}");
+    }
+}
