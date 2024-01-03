@@ -3,7 +3,7 @@
 use std::fs::File;
 use std::io::Read;
 use qkd_kme_server::qkd_manager::{QkdKey, QkdManager};
-use qkd_kme_server::routes::QKDKMERoutes;
+use qkd_kme_server::routes::QKDKMERoutesV1;
 
 pub const HOST_PORT: &'static str = "localhost:3000";
 
@@ -34,7 +34,7 @@ pub fn setup() {
     ).unwrap();
     qkd_manager.add_qkd_key(qkd_key_2).unwrap();
 
-    tokio::spawn(async move {server.run::<QKDKMERoutes>(&qkd_manager).await.unwrap();});
+    tokio::spawn(async move {server.run::<QKDKMERoutesV1>(&qkd_manager).await.unwrap();});
 }
 
 pub fn setup_cert_auth_reqwest_client() -> reqwest::Client {

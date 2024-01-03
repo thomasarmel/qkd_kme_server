@@ -1,10 +1,18 @@
+//! SSL certificate and private key loading from files
+
 use std::fs::File;
 use std::io;
 use std::io::BufReader;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use crate::io_err;
 
-/// Load the server certificate
+/// Load SSL certificate(s) from a file path
+/// # Arguments
+/// * `filename` - The path to the file containing the certificate(s), .crt
+/// # Returns
+/// A vector of CertificateDer objects, containing the certificate(s). The certificates have a static lifetime
+/// # Errors
+/// If the file cannot be opened, or the certificate(s) cannot be parsed
 pub(super) fn load_cert(filename: &str) -> Result<Vec<CertificateDer<'static>>, io::Error> {
     let certfile = File::open(filename).map_err(|_| {
         io_err("Cannot open server certificate file")
@@ -22,7 +30,13 @@ pub(super) fn load_cert(filename: &str) -> Result<Vec<CertificateDer<'static>>, 
     Ok(certs)
 }
 
-/// Load the server private key
+/// Load SSL private key(s) from a file path
+/// # Arguments
+/// * `filename` - The path to the file containing the private key(s), .key
+/// # Returns
+/// A vector of PrivateKeyDer objects, containing the private key(s). The private keys have a static lifetime
+/// # Errors
+/// If the file cannot be opened, or the private key(s) cannot be parsed
 pub(super) fn load_pkey(filename: &str) -> Result<Vec<PrivateKeyDer<'static>>, io::Error> {
     let keyfile = File::open(filename).map_err(|_| {
         io_err("Cannot open server private key file")

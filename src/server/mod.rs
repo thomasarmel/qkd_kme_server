@@ -1,3 +1,5 @@
+//! HTTPS server implementation
+
 mod certificates;
 
 extern crate hyper;
@@ -22,14 +24,38 @@ use crate::io_err;
 use crate::qkd_manager::QkdManager;
 use crate::server::certificates::{load_cert, load_pkey};
 
+
+/// QKD KME server
+/// A KME REST API server that implements the ETSI protocol (cf docs/etsi_qkd_standard_definition.pdf)
+/// # Note
+/// * SAE clients are authenticated using client certificates, and the server is authenticated using a server certificate
+/// * SAE client certificate must be signed by the CA certificate specified in the configuration, and authorized client certificates are discriminated by their serial number
 pub struct Server {
+    /// HTTPS listen address, e.g. "0.0.0.0:443"
     pub listen_addr: String,
+    /// Path to the CA certificate used to verify client certificates
+    /// # Note
+    /// * The CA certificate must be in CRT format
+    /// * The client need a certificate signed by this CA to be able to connect to the server
+    /// * Once connected, client are authenticated using their certificate serial number
     pub ca_client_cert_path: String,
+    /// Path to the server certificate, CRT format
+    /// # Note
+    /// * Be aware that your SAE clients will need to trust this certificate
     pub server_cert_path: String,
+    /// Path to the server private key, KEY format
     pub server_key_path: String,
 }
 
 impl Server {
+
+    /// Run the REST HTTPS server asynchronously
+    /// # Type parameters
+    /// * `T` - The type of the routes to use, type implements the REST API routes
+    /// # Arguments
+    /// * `qkd_manager` - The QKD manager, needed to store and retrieve QKD keys
+    /// # Returns
+    /// An io::Error if the server cannot be started (check the logs for more information)
     pub async fn run<T: crate::routes::Routes>(&self, qkd_manager: &QkdManager) -> Result<(), io::Error> {
         let addr = self.listen_addr.parse::<SocketAddr>().map_err(|e| {
             io_err(&format!(
@@ -63,13 +89,14 @@ impl Server {
                 .clone().into_owned());
 
             let io = TokioIo::new(stream);
-            let qkd_manager = qkd_manager.clone();
+            let qkd_manager = qkd_manager.clone(); // Must be cloned to be moved into each new task
 
             tokio::task::spawn(async move {
                 let response_service = service_fn(|req: Request<hyper::body::Incoming>| {
                     let local_client_cert_serial_str = Arc::clone(&client_cert);
-                    let qkd_manager = qkd_manager.clone();
+                    let qkd_manager = qkd_manager.clone(); // Must be cloned in each new task
                     async move {
+                        // Let the route type handle the request
                         T::handle_request(req, Some(&local_client_cert_serial_str), qkd_manager).await
                     }
                 });
@@ -85,7 +112,11 @@ impl Server {
 
     }
 
-    /// Load the SSL configuration for rustls
+    /// Load the SSL configuration for RusTLS layer
+    /// # Returns
+    /// A ServerConfig object, containing the RusTLS SSL configuration
+    /// # Errors
+    /// If the configuration cannot be loaded (e.g. invalid certificate file, check the logs for more information)
     fn get_ssl_config(&self) -> Result<ServerConfig, io::Error> {
         // Trusted CA for client certificates
         let mut roots = RootCertStore::empty();
@@ -99,6 +130,8 @@ impl Server {
         })?;
 
         let server_cert = load_cert(self.server_cert_path.as_str())?;
+
+        // We retrieve the first key, as we only support one key per server
         let server_key = load_pkey(self.server_key_path.as_str())?.remove(0);
 
         let config = ServerConfig::builder()

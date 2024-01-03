@@ -1,3 +1,5 @@
+//! Route definitions for the server
+
 mod keys;
 mod request_context;
 
@@ -15,19 +17,30 @@ use rustls_pki_types::CertificateDer;
 use crate::RESPONSE_ERROR_FUNCTION;
 
 
+/// Trait representing the routes of the server
+/// Implement this trait to create a new routing system
+/// Should be implemented by the struct that will be used as a router, for example at each version of the API
 #[async_trait]
 pub trait Routes {
+    /// Function that handles the API request
+    /// # Arguments
+    /// * `req` - The request received by the server, in hyper format
+    /// * `client_cert` - A reference to the client certificate, if present
+    /// * `qkd_manager` - A clone of the QKD manager, to be used to access the QKD system
+    /// # Returns
+    /// A response to the request, in hyper format
     async fn handle_request(req: Request<body::Incoming>, client_cert: Option<&CertificateDer>, qkd_manager: QkdManager) -> Result<Response<Full<Bytes>>, Infallible>;
 }
 
-
-pub struct QKDKMERoutes {}
+/// Struct representing the routes of the server for the v1 version of the API
+pub struct QKDKMERoutesV1 {}
 
 #[async_trait]
-impl Routes for QKDKMERoutes {
+impl Routes for QKDKMERoutesV1 {
     async fn handle_request(req: Request<body::Incoming>, client_cert: Option<&CertificateDer>, qkd_manager: QkdManager) -> Result<Response<Full<Bytes>>, Infallible> {
         let path = req.uri().path().to_owned();
 
+        // Create the request context
         let rcx = match RequestContext::new(client_cert, qkd_manager) {
             Ok(context) => context,
             Err(e) => {
@@ -36,35 +49,43 @@ impl Routes for QKDKMERoutes {
             }
         };
 
+        // Split the path into segments, eg "/api/v1/keys" -> ["api", "v1", "keys"]
         let segments: Vec<&str> =
             path.split('/').filter(|s| !s.is_empty()).collect();
+
+        // If path has less than 3 segments, or the first two segments are not "api" and "v1", return 404
         if segments.len() < 3 || segments[0] != "api" || segments[1] != "v1" {
             return Self::not_found();
         }
+
+        // Call the correct handler based on the third segment
         match segments[2] {
             "keys" => keys::key_handler(&rcx, req, &segments[3..]).await,
-            &_ => Self::not_found(),
+            &_ => Self::not_found(), // Third segment must be "keys"
         }
     }
 }
 
 
 #[allow(dead_code)]
-impl QKDKMERoutes {
+impl QKDKMERoutesV1 {
     RESPONSE_ERROR_FUNCTION!(internal_server_error, StatusCode::INTERNAL_SERVER_ERROR, "Internal server error");
     RESPONSE_ERROR_FUNCTION!(not_found, StatusCode::NOT_FOUND, "Element not found");
     RESPONSE_ERROR_FUNCTION!(authentication_error, StatusCode::UNAUTHORIZED, "Authentication error");
     RESPONSE_ERROR_FUNCTION!(bad_request, StatusCode::BAD_REQUEST, "Bad request");
 }
 
+/// Macro to generate the functions that return the error responses
 #[allow(non_snake_case)]
 #[macro_export]
 macro_rules! RESPONSE_ERROR_FUNCTION {
     ($function_name:tt, $status_code:expr, $error_message:expr) => {
         fn $function_name() -> Result<Response<Full<Bytes>>, Infallible> {
+            // Create the body of the error response
             let error_body = http_response_obj::ResponseError {
                 message: String::from($error_message),
             };
+            // Send back HTTP error code and JSON message, following ETSI standard
             Ok(Response::builder().status($status_code).body(Full::new(Bytes::from(error_body.to_json().unwrap()))).unwrap())
         }
     }
@@ -77,7 +98,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_internal_server_error() {
-        let response = super::QKDKMERoutes::internal_server_error().unwrap();
+        let response = super::QKDKMERoutesV1::internal_server_error().unwrap();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
         assert_eq!(body, "{\n  \"message\": \"Internal server error\"\n}");
@@ -85,7 +106,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_not_found() {
-        let response = super::QKDKMERoutes::not_found().unwrap();
+        let response = super::QKDKMERoutesV1::not_found().unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
         assert_eq!(body, "{\n  \"message\": \"Element not found\"\n}");
@@ -93,7 +114,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_authentication_error() {
-        let response = super::QKDKMERoutes::authentication_error().unwrap();
+        let response = super::QKDKMERoutesV1::authentication_error().unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
         assert_eq!(body, "{\n  \"message\": \"Authentication error\"\n}");
@@ -101,7 +122,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_bad_request() {
-        let response = super::QKDKMERoutes::bad_request().unwrap();
+        let response = super::QKDKMERoutesV1::bad_request().unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
         assert_eq!(body, "{\n  \"message\": \"Bad request\"\n}");

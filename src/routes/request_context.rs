@@ -1,3 +1,5 @@
+//! Request context, used to store and share information about the current request
+
 use std::io;
 use rustls_pki_types::CertificateDer;
 use x509_parser::certificate::X509Certificate;
@@ -5,13 +7,26 @@ use x509_parser::prelude::FromDer;
 use crate::io_err;
 use crate::qkd_manager::QkdManager;
 
+/// Context created for each request,
+/// to be transmitted recursively to each function managing the request as a mutable reference
 pub(super) struct RequestContext<'a> {
     client_cert: Option<X509Certificate<'a>>,
+    /// The QKD manager, used to store and retrieve QKD keys
+    /// (moved once at the beginning of the request)
     pub(crate) qkd_manager: QkdManager,
 }
 
 #[allow(dead_code)]
 impl<'a> RequestContext<'a> {
+
+    /// Create a new request context
+    /// # Arguments
+    /// * `client_cert` - The client certificate, if any
+    /// * `qkd_manager` - The QKD manager, used to store and retrieve QKD keys
+    /// # Returns
+    /// A new request context
+    /// # Errors
+    /// If the client certificate is invalid
     pub(crate) fn new(client_cert: Option<&'a CertificateDer>, qkd_manager: QkdManager) -> Result<Self, io::Error> {
         Ok(Self {
             client_cert: match client_cert {
@@ -24,10 +39,18 @@ impl<'a> RequestContext<'a> {
         })
     }
 
+    /// Check if the client associated with this request has a client certificate for authentication
+    /// # Returns
+    /// True in case a client certificate is associated with the request context, false otherwise
     pub(crate) fn has_client_certificate(&self) -> bool {
         self.client_cert.is_some()
     }
 
+    /// Get the client certificate common name
+    /// # Returns
+    /// The client certificate common name as a string slice if the client has a certificate
+    /// # Errors
+    /// io::Error if the client does not have a certificate, or if the certificate does not contain a common name
     pub(crate) fn get_client_certificate_cn(&self) -> Result<&str, io::Error>  {
         let cert = self.certificate_or_error()?;
         let cert_subject = cert.subject();
@@ -40,11 +63,21 @@ impl<'a> RequestContext<'a> {
         Ok(cn)
     }
 
+    /// Get the client certificate serial number as a String
+    /// # Returns
+    /// The client certificate serial number as a String if the client has a certificate
+    /// # Errors
+    /// io::Error if the client does not have a certificate
     pub(crate) fn get_client_certificate_serial_as_string(&self) -> Result<String, io::Error> {
         let cert = self.certificate_or_error()?;
         Ok(cert.raw_serial_as_string())
     }
 
+    /// Get the client certificate serial number as a raw byte array
+    /// # Returns
+    /// The client certificate serial number as a raw byte array if the client has a certificate
+    /// # Errors
+    /// io::Error if the client does not have a certificate
     pub(crate) fn get_client_certificate_serial_as_raw(&self) -> Result<&[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], io::Error> {
         let cert = self.certificate_or_error()?;
         Ok(<&[u8; 20]>::try_from(cert.raw_serial()).map_err(|_| {

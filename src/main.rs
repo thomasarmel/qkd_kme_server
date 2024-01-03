@@ -1,6 +1,6 @@
 use log::error;
 use qkd_kme_server::qkd_manager::{QkdKey, QkdManager};
-use qkd_kme_server::routes::QKDKMERoutes;
+use qkd_kme_server::routes::QKDKMERoutesV1;
 
 #[tokio::main]
 async fn main() {
@@ -53,7 +53,7 @@ async fn main() {
         return;
     }
 
-    if server.run::<QKDKMERoutes>(&qkd_manager).await.is_err() {
+    if server.run::<QKDKMERoutesV1>(&qkd_manager).await.is_err() {
         error!("Error running HTTP server");
         return;
     }

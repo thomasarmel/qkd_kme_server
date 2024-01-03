@@ -1,6 +1,9 @@
+//! Objects serialized to HTTP response body
+
 use std::io;
 use serde::Serialize;
 
+/// Trait to be implemented by objects that can be serialized to JSON
 pub(crate) trait HttpResponseBody where Self: serde::Serialize {
     fn to_json(&self) -> Result<String, io::Error> {
         Ok(serde_json::to_string_pretty(&self).map_err(|_| {
@@ -9,15 +12,17 @@ pub(crate) trait HttpResponseBody where Self: serde::Serialize {
     }
 }
 
+/// All HTTP errors that can be returned by the QKD manager
 #[derive(Serialize)]
 pub(crate) struct ResponseError {
     pub(crate) message: String,
 }
 impl HttpResponseBody for ResponseError {} // can't use Derive macro because of the generic constraint
 
+/// Status of the QKD keys (how many available etc.)
+/// Shall be called by master SAE to know if keys can be delivered to the slave SAE.
 #[derive(Serialize, Debug, PartialEq)]
 #[allow(non_snake_case)]
-/// Shall be called by master SAE to know if keys can be delivered to the slave SAE.
 pub(crate) struct ResponseQkdKeysStatus {
     /// KME ID of the KME
     pub(crate) source_KME_ID: String,
@@ -55,6 +60,7 @@ pub(crate) struct ResponseQkdKeysStatus {
 }
 impl HttpResponseBody for ResponseQkdKeysStatus {} // can't use Derive macro because of the generic constraint
 
+/// Key data
 #[derive(Serialize, Debug, PartialEq)]
 #[allow(non_snake_case)]
 pub(crate) struct ResponseQkdKey {
@@ -70,6 +76,7 @@ pub(crate) struct ResponseQkdKey {
     // key_extension -> to be implemented in the future
 }
 
+/// List of keys
 #[derive(Serialize, Debug, PartialEq)]
 pub(crate) struct ResponseQkdKeysList {
     /// Array of keys. The number of keys is specified by the "number" parameter in "Get key". If not specified, the default number of keys is 1.
