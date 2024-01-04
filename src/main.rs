@@ -18,6 +18,12 @@ async fn main() {
         error!("Error adding SAE to QKD manager");
         return;
     }
+    if qkd_manager.add_sae(2,
+                           &[0x70, 0xf4, 0x4f, 0x56, 0x0c, 0x3f, 0x27, 0xd4, 0xb2, 0x11, 0xa4, 0x78, 0x13, 0xaf, 0xd0, 0x3c, 0x03, 0x81, 0x3b, 0x92]
+    ).is_err() {
+        error!("Error adding SAE to QKD manager");
+        return;
+    }
 
     let qkd_key_1 = match QkdKey::new(
         1,

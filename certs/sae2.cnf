@@ -1,0 +1,8 @@
+[client]
+basicConstraints = CA:FALSE
+nsCertType = client, email
+nsComment = "SAE2 Client Certificate"
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth, emailProtection
