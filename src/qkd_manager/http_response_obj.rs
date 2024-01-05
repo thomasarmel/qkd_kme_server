@@ -1,7 +1,6 @@
 //! Objects serialized to HTTP response body
 
 use std::io;
-use serde::Serialize;
 
 /// Trait to be implemented by objects that can be serialized to JSON
 pub(crate) trait HttpResponseBody where Self: serde::Serialize {
@@ -13,7 +12,7 @@ pub(crate) trait HttpResponseBody where Self: serde::Serialize {
 }
 
 /// All HTTP errors that can be returned by the QKD manager
-#[derive(Serialize)]
+#[derive(serde::Serialize)]
 pub(crate) struct ResponseError {
     pub(crate) message: String,
 }
@@ -21,7 +20,7 @@ impl HttpResponseBody for ResponseError {} // can't use Derive macro because of 
 
 /// Status of the QKD keys (how many available etc.)
 /// Shall be called by master SAE to know if keys can be delivered to the slave SAE.
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(serde::Serialize, Debug, PartialEq)]
 #[allow(non_snake_case)]
 pub(crate) struct ResponseQkdKeysStatus {
     /// KME ID of the KME
@@ -61,7 +60,7 @@ pub(crate) struct ResponseQkdKeysStatus {
 impl HttpResponseBody for ResponseQkdKeysStatus {} // can't use Derive macro because of the generic constraint
 
 /// Key data
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(serde::Serialize, Debug, PartialEq)]
 #[allow(non_snake_case)]
 pub(crate) struct ResponseQkdKey {
     /// ID of the key: UUID format (example: "550e8400-e29b-41d4-a716-446655440000").
@@ -76,8 +75,20 @@ pub(crate) struct ResponseQkdKey {
     // key_extension -> to be implemented in the future
 }
 
+/// SAE information
+/// Used to specify the SAE ID, and likely other information in the future
+/// Could be called when the SAE has to know its own id for example
+#[derive(serde::Serialize, Debug, PartialEq)]
+#[allow(non_snake_case)]
+pub(crate) struct ResponseQkdSAEInfo {
+    /// SAE ID of the SAE
+    pub(crate) SAE_ID: i64,
+}
+
+impl HttpResponseBody for ResponseQkdSAEInfo {} // can't use Derive macro because of the generic constraint
+
 /// List of keys
-#[derive(Serialize, Debug, PartialEq)]
+#[derive(serde::Serialize, Debug, PartialEq)]
 pub(crate) struct ResponseQkdKeysList {
     /// Array of keys. The number of keys is specified by the "number" parameter in "Get key". If not specified, the default number of keys is 1.
     pub(crate) keys: Vec<ResponseQkdKey>,
@@ -126,5 +137,14 @@ mod test {
             keys: vec![response_qkd_key],
         }.to_json().unwrap();
         assert_eq!(response_qkd_key_list_json, "{\n  \"keys\": [\n    {\n      \"key_ID\": \"key_ID\",\n      \"key\": \"key\"\n    }\n  ]\n}");
+    }
+
+    #[test]
+    fn test_serialize_response_qkd_sae_info() {
+        let response_qkd_sae_info = super::ResponseQkdSAEInfo {
+            SAE_ID: 1,
+        };
+        let response_qkd_sae_info_json = response_qkd_sae_info.to_json().unwrap();
+        assert_eq!(response_qkd_sae_info_json, "{\n  \"SAE_ID\": 1\n}");
     }
 }

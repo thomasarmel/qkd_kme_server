@@ -2,10 +2,10 @@
 
 mod certificates;
 
-extern crate hyper;
-extern crate rustls;
-extern crate tokio;
-extern crate tokio_rustls;
+use hyper;
+use rustls;
+use tokio;
+use tokio_rustls;
 
 use std::io;
 use std::net::SocketAddr;

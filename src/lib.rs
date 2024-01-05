@@ -1,3 +1,14 @@
+//! QKD KME server: an HTTPS server with bilateral authentication that implements the ETSI GS QKD 014 V1.1.1 (2019-02) standard
+
+#![forbid(unsafe_code, unused_must_use)]
+#![deny(
+missing_docs,
+unreachable_pub,
+unused_import_braces,
+unused_extern_crates,
+unused_qualifications
+)]
+
 use std::io;
 
 pub mod server;

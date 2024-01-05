@@ -47,6 +47,17 @@ pub fn setup_cert_auth_reqwest_client() -> reqwest::Client {
         .build().unwrap()
 }
 
+pub fn setup_cert_auth_reqwest_client_unregistered_sae() -> reqwest::Client {
+    let mut buf = Vec::new();
+    // SAE2 is not registered in SAEs database
+    File::open("certs/sae2.pfx").unwrap().read_to_end(&mut buf).unwrap();
+    let client_cert_id = reqwest::Identity::from_pkcs12_der(&buf, "").unwrap();
+    reqwest::Client::builder()
+        .identity(client_cert_id)
+        .danger_accept_invalid_certs(true) // Instead of importing root certificate
+        .build().unwrap()
+}
+
 pub fn setup_cert_auth_reqwest_bad_client() -> reqwest::Client {
     let mut buf = Vec::new();
     File::open("tests/data/bad_certs/bad_client.pfx").unwrap().read_to_end(&mut buf).unwrap();

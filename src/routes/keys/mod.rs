@@ -1,3 +1,5 @@
+//! Routes for the `/api/v1/keys` endpoint, managing QKD keys
+
 use std::convert::Infallible;
 use http_body_util::Full;
 use hyper::{body, Request, Response};

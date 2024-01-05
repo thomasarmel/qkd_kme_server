@@ -145,11 +145,28 @@ impl QkdManager {
             qkd_response_error => Err(qkd_response_error),
         }
     }
+
+    /// Get information about a SAE from its client auth certificate (SAE id)
+    /// # Arguments
+    /// * `client_certificate_serial` - The serial number of the client certificate of the SAE, to authenticate and identify the caller
+    /// # Returns
+    /// The SAE information (like SAE ID) if the SAE was found, an error otherwise
+    pub fn get_sae_info_from_client_auth_certificate(&self, client_certificate_serial: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Result<SAEInfo, QkdManagerResponse> {
+        self.command_tx.send(QkdManagerCommand::GetSaeInfoFromCertificate(*client_certificate_serial)).map_err(|_| {
+            TransmissionError
+        })?;
+        match self.response_rx.recv().map_err(|_| {
+            TransmissionError
+        })? {
+            QkdManagerResponse::SaeInfo(sae_info) => Ok(sae_info), // SaeInfo is the QkdManagerResponse expected here
+            qkd_response_error => Err(qkd_response_error), // Likely not found
+        }
+    }
 }
 
 /// A QKD key, with its origin and target SAE IDs
 /// # Note
-/// This is not the key serialized in HTTP response, which is [ResponseQkdKey](crate::qkd_manager::http_response_obj::ResponseQkdKey)
+/// This is not the key serialized in HTTP response, which is [ResponseQkdKey](http_response_obj::ResponseQkdKey)
 #[derive(Debug, Clone)]
 pub struct QkdKey {
     /// The ID of the origin (master) SAE
@@ -201,9 +218,18 @@ impl QkdKey {
     }
 }
 
+/// Describes information about a SAE
+#[derive(Debug, Clone, PartialEq)]
+pub struct SAEInfo {
+    /// The ID of the SAE
+    pub(crate) sae_id: i64,
+    /// The serial number of the client certificate identifying the SAE
+    pub(crate) sae_certificate_serial: [u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES],
+}
+
 /// All possible commands to the QKD manager
 /// # Note
-/// For QKD manager internal usage, interface should be managed from [QkdManager](crate::qkd_manager::QkdManager) implementation functions
+/// For QKD manager internal usage, interface should be managed from [QkdManager](QkdManager) implementation functions
 enum QkdManagerCommand {
     /// Add a new QKD key to the database
     AddKey(QkdKey),
@@ -215,6 +241,8 @@ enum QkdManagerCommand {
     GetStatus([u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], i64), // origin certificate + target id
     /// Add a new SAE to the database (shall be called before SAEs start requesting KME)
     AddSae(i64, [u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]), // target id + target certificate
+    /// Get information about a SAE from its client auth certificate
+    GetSaeInfoFromCertificate([u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]), // caller's certificate
 }
 
 /// All possible responses from the QKD manager
@@ -235,6 +263,8 @@ pub enum QkdManagerResponse {
     Keys(ResponseQkdKeysList),
     /// The operation was successful, the requested key exchange status is returned
     Status(http_response_obj::ResponseQkdKeysStatus),
+    /// The operation was successful, the requested SAE information is returned (for example if GetSaeInfoFromCertificate is called)
+    SaeInfo(SAEInfo),
 }
 
 
@@ -319,5 +349,20 @@ mod test {
         let key_uuid = key.get_uuid();
         let key_uuid_str = uuid::Uuid::from_bytes(key_uuid).to_string();
         assert_eq!(key_uuid_str, "7b848ade-8cff-3d54-a9b8-53a215e6ee77");
+    }
+
+    #[test]
+    fn test_get_sae_info_from_client_auth_certificate() {
+        const SQLITE_DB_PATH: &'static str = ":memory:";
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH);
+        qkd_manager.add_sae(1, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).unwrap();
+        let response = qkd_manager.get_sae_info_from_client_auth_certificate(&[0; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        assert!(response.is_ok());
+        assert_eq!(response.unwrap().sae_id, 1);
+
+        // SAE certificate not present in database
+        let response = qkd_manager.get_sae_info_from_client_auth_certificate(&[1; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        assert!(response.is_err());
+        assert_eq!(response.unwrap_err(), super::QkdManagerResponse::NotFound);
     }
 }

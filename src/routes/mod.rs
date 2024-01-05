@@ -2,6 +2,7 @@
 
 mod keys;
 mod request_context;
+mod sae;
 
 use std::convert::Infallible;
 use request_context::RequestContext;
@@ -12,6 +13,7 @@ use crate::qkd_manager::http_response_obj::HttpResponseBody;
 use async_trait::async_trait;
 use http_body_util::Full;
 use hyper::body::Bytes;
+use hyper::header::CONTENT_TYPE;
 use log::error;
 use rustls_pki_types::CertificateDer;
 use crate::RESPONSE_ERROR_FUNCTION;
@@ -61,6 +63,7 @@ impl Routes for QKDKMERoutesV1 {
         // Call the correct handler based on the third segment
         match segments[2] {
             "keys" => keys::key_handler(&rcx, req, &segments[3..]).await,
+            "sae" => sae::sae_handler(&rcx, req, &segments[3..]).await,
             &_ => Self::not_found(), // Third segment must be "keys"
         }
     }
@@ -73,6 +76,16 @@ impl QKDKMERoutesV1 {
     RESPONSE_ERROR_FUNCTION!(not_found, StatusCode::NOT_FOUND, "Element not found");
     RESPONSE_ERROR_FUNCTION!(authentication_error, StatusCode::UNAUTHORIZED, "Authentication error");
     RESPONSE_ERROR_FUNCTION!(bad_request, StatusCode::BAD_REQUEST, "Bad request");
+
+    /// Creates a HTTP response 200 from a string (likely a JSON)
+    /// # Arguments
+    /// * `body` - The body of the response, as a string
+    /// # Returns
+    /// A HTTP response with status code 200 and the body as a JSON content type
+    fn json_response_from_str(body: &str) -> Response<Full<Bytes>> {
+        const JSON_CONTENT_TYPE: &'static str = "application/json";
+        Response::builder().status(StatusCode::OK).header(CONTENT_TYPE, JSON_CONTENT_TYPE).body(Full::new(Bytes::from(String::from(body)))).unwrap()
+    }
 }
 
 /// Macro to generate the functions that return the error responses
@@ -126,5 +139,14 @@ mod tests {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
         assert_eq!(body, "{\n  \"message\": \"Bad request\"\n}");
+    }
+
+    #[tokio::test]
+    async fn test_json_response_from_str() {
+        let response = super::QKDKMERoutesV1::json_response_from_str("{\"variable\": \"value\"}");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("content-type").unwrap(), "application/json");
+        let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+        assert_eq!(body, "{\"variable\": \"value\"}");
     }
 }

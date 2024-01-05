@@ -40,7 +40,7 @@ pub(in crate::routes) fn route_get_status(rcx: &RequestContext, _req: Request<bo
                 }
             };
             // Return the key status as a response
-            Ok(response_from_str(&key_status_json))
+            Ok(crate::routes::QKDKMERoutesV1::json_response_from_str(&key_status_json))
         }
         QkdManagerResponse::AuthenticationError => {
             super::QKDKMERoutesV1::authentication_error()
@@ -84,7 +84,7 @@ pub(in crate::routes) fn route_get_key(rcx: &RequestContext, _req: Request<body:
                 }
             };
             // Return the key(s) as a response
-            Ok(response_from_str(&keys_json))
+            Ok(crate::routes::QKDKMERoutesV1::json_response_from_str(&keys_json))
         }
         QkdManagerResponse::AuthenticationError => {
             super::QKDKMERoutesV1::authentication_error()
@@ -165,7 +165,7 @@ pub(in crate::routes) async fn route_get_key_with_id(rcx: &RequestContext<'_>, r
                 }
             };
             // Return the key(s) as a response
-            Ok(response_from_str(&keys_json))
+            Ok(crate::routes::QKDKMERoutesV1::json_response_from_str(&keys_json))
         }
         QkdManagerResponse::AuthenticationError => {
             super::QKDKMERoutesV1::authentication_error()
@@ -176,12 +176,7 @@ pub(in crate::routes) async fn route_get_key_with_id(rcx: &RequestContext<'_>, r
     }
 }
 
-/// Creates a HTTP response from a string (likely a JSON)
-fn response_from_str(body: &str) -> Response<Full<Bytes>> {
-    Response::new(Full::new(Bytes::from(String::from(body))))
-}
-
-// Casts the SAE ID to an integer, or returns a 400 error if fails
+/// Casts the SAE ID to an integer, or returns a 400 error if fails
 #[macro_export]
 macro_rules! ensure_sae_id_integer {
     ($sae_id:expr) => {
@@ -195,7 +190,7 @@ macro_rules! ensure_sae_id_integer {
     }
 }
 
-// Gets the client certificate serial as a raw byte vector, or returns a 401 error if fails (should never happen in a normal scenario)
+/// Gets the client certificate serial as a raw byte vector, or returns a 401 error if fails (should never happen in a normal scenario)
 #[macro_export]
 macro_rules! ensure_client_certificate_serial {
     ($request_context:expr) => {

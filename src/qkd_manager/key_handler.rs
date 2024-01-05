@@ -5,9 +5,9 @@ use std::io;
 use uuid::Bytes;
 use x509_parser::nom::AsBytes;
 use crate::qkd_manager;
-use crate::qkd_manager::{QkdKey, QkdManagerCommand, QkdManagerResponse};
+use crate::qkd_manager::{QkdKey, QkdManagerCommand, QkdManagerResponse, SAEInfo};
 use base64::{engine::general_purpose, Engine as _};
-use log::{error, info};
+use log::{error, info, warn};
 use crate::qkd_manager::http_response_obj::{ResponseQkdKey, ResponseQkdKeysList};
 use crate::ensure_prepared_statement_ok;
 
@@ -101,6 +101,23 @@ impl KeyHandler {
                         QkdManagerCommand::GetStatus(origin_sae_certificate, target_sae_id) => {
                             info!("Getting status for SAE ID {}", target_sae_id);
                             if self.response_tx.send(self.get_sae_status(&origin_sae_certificate, target_sae_id).unwrap_or_else(identity)).is_err() {
+                                error!("Error QKD manager sending response");
+                            }
+                        },
+                        QkdManagerCommand::GetSaeInfoFromCertificate(sae_certificate) => {
+                            info!("Getting SAE ID from certificate");
+                            let sae_id = self.get_sae_id_from_certificate(&sae_certificate);
+                            let response = match sae_id {
+                                Some(sae_id) => QkdManagerResponse::SaeInfo(SAEInfo {
+                                    sae_id,
+                                    sae_certificate_serial: sae_certificate,
+                                }),
+                                None => {
+                                    warn!("SAE certificate not found in database");
+                                    QkdManagerResponse::NotFound
+                                },
+                            };
+                            if self.response_tx.send(response).is_err() {
                                 error!("Error QKD manager sending response");
                             }
                         },
@@ -545,5 +562,17 @@ mod tests {
         command_tx.send(super::QkdManagerCommand::GetStatus(sae_certificate_serial, 2)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Status(_)));
+
+        command_tx.send(super::QkdManagerCommand::GetSaeInfoFromCertificate(sae_certificate_serial)).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::SaeInfo(_)));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::SaeInfo(super::SAEInfo {
+            sae_id,
+            sae_certificate_serial,
+        }));
+
+        command_tx.send(super::QkdManagerCommand::GetSaeInfoFromCertificate([1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
     }
 }
