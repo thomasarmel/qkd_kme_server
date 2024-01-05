@@ -83,6 +83,7 @@ pub(crate) struct ResponseQkdKey {
 pub(crate) struct ResponseQkdSAEInfo {
     /// SAE ID of the SAE
     pub(crate) SAE_ID: i64,
+    // TODO: KME ID ?
 }
 
 impl HttpResponseBody for ResponseQkdSAEInfo {} // can't use Derive macro because of the generic constraint
