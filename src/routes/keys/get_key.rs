@@ -170,6 +170,9 @@ pub(in crate::routes) async fn route_get_key_with_id(rcx: &RequestContext<'_>, r
         QkdManagerResponse::AuthenticationError => {
             super::QKDKMERoutesV1::authentication_error()
         }
+        QkdManagerResponse::NotFound => {
+            super::QKDKMERoutesV1::not_found()
+        }
         _ => {
             super::QKDKMERoutesV1::internal_server_error()
         }
