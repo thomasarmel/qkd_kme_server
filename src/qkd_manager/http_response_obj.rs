@@ -1,6 +1,7 @@
 //! Objects serialized to HTTP response body
 
 use std::io;
+use crate::{KmeId, SaeId};
 
 /// Trait to be implemented by objects that can be serialized to JSON
 pub(crate) trait HttpResponseBody where Self: serde::Serialize {
@@ -82,8 +83,9 @@ pub(crate) struct ResponseQkdKey {
 #[allow(non_snake_case)]
 pub(crate) struct ResponseQkdSAEInfo {
     /// SAE ID of the SAE
-    pub(crate) SAE_ID: i64,
-    // TODO: KME ID ?
+    pub(crate) SAE_ID: SaeId,
+    /// KME ID SAE belongs to
+    pub(crate) KME_ID: KmeId,
 }
 
 impl HttpResponseBody for ResponseQkdSAEInfo {} // can't use Derive macro because of the generic constraint
@@ -144,8 +146,9 @@ mod test {
     fn test_serialize_response_qkd_sae_info() {
         let response_qkd_sae_info = super::ResponseQkdSAEInfo {
             SAE_ID: 1,
+            KME_ID: 1,
         };
         let response_qkd_sae_info_json = response_qkd_sae_info.to_json().unwrap();
-        assert_eq!(response_qkd_sae_info_json, "{\n  \"SAE_ID\": 1\n}");
+        assert_eq!(response_qkd_sae_info_json, "{\n  \"SAE_ID\": 1,\n  \"KME_ID\": 1\n}");
     }
 }

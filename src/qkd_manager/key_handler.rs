@@ -4,8 +4,8 @@ use std::convert::identity;
 use std::io;
 use uuid::Bytes;
 use x509_parser::nom::AsBytes;
-use crate::qkd_manager;
-use crate::qkd_manager::{QkdKey, QkdManagerCommand, QkdManagerResponse, SAEInfo};
+use crate::{io_err, KmeId, qkd_manager, SaeId};
+use crate::qkd_manager::{KMEInfo, PreInitQkdKeyWrapper, QkdManagerCommand, QkdManagerResponse, SAEInfo};
 use base64::{engine::general_purpose, Engine as _};
 use log::{error, info, warn};
 use crate::qkd_manager::http_response_obj::{ResponseQkdKey, ResponseQkdKeysList};
@@ -19,6 +19,8 @@ pub(super) struct KeyHandler {
     response_tx: crossbeam_channel::Sender<QkdManagerResponse>,
     /// Connection to the sqlite database (in memory or on disk)
     sqlite_db: sqlite::Connection,
+    /// The ID of this KME
+    this_kme_id: KmeId,
 }
 
 impl KeyHandler {
@@ -32,7 +34,9 @@ impl KeyHandler {
     /// A new key handler
     /// # Errors
     /// If the sqlite database cannot be opened or if the tables cannot be created
-    pub(super) fn new(sqlite_db_path: &str, command_rx: crossbeam_channel::Receiver<QkdManagerCommand>, response_tx: crossbeam_channel::Sender<QkdManagerResponse>) -> Result<Self, io::Error> {
+    pub(super) fn new(sqlite_db_path: &str, command_rx: crossbeam_channel::Receiver<QkdManagerCommand>, response_tx: crossbeam_channel::Sender<QkdManagerResponse>, this_kme_id: i64) -> Result<Self, io::Error> {
+        const DATABASE_INIT_REQ: &'static str = include_str!("init_qkd_database.sql");
+
         let key_handler = Self {
             command_rx,
             response_tx,
@@ -40,20 +44,10 @@ impl KeyHandler {
             sqlite_db: sqlite::open(sqlite_db_path).map_err(|e| {
                 io::Error::new(io::ErrorKind::NotConnected, format!("Error opening sqlite database: {:?}", e))
             })?,
+            this_kme_id,
         };
         // Create the tables if they do not exist
-        key_handler.sqlite_db.execute(
-            "CREATE TABLE IF NOT EXISTS keys (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                    key_uuid TEXT NOT NULL,
-                    key BLOB NOT NULL,
-                    origin_sae_id INTEGER NOT NULL,
-                    target_sae_id INTEGER NOT NULL,
-                    FOREIGN KEY (origin_sae_id) REFERENCES saes(sae_id),
-                    FOREIGN KEY (target_sae_id) REFERENCES saes(sae_id));
-                CREATE TABLE IF NOT EXISTS saes (
-                    sae_id INTEGER PRIMARY KEY NOT NULL,
-                    sae_certificate_serial BLOB NOT NULL);").map_err(|e| {
+        key_handler.sqlite_db.execute(DATABASE_INIT_REQ).map_err(|e| {
             io::Error::new(io::ErrorKind::InvalidInput, format!("Error creating sqlite tables: {:?}", e))
         })?;
         Ok(key_handler)
@@ -70,9 +64,9 @@ impl KeyHandler {
                 Ok(cmd) => {
                     match cmd {
                         // Insert a key into the database, each time a QKD exchange occurs
-                        QkdManagerCommand::AddKey(key) => {
-                            info!("Adding key for SAE ID {}", key.target_sae_id);
-                            if self.response_tx.send(self.add_key(key).unwrap_or_else(identity)).is_err() {
+                        QkdManagerCommand::AddPreInitKey(key) => {
+                            info!("Adding key for KME ID {} and {}", self.this_kme_id, key.other_kme_id);
+                            if self.response_tx.send(self.add_preinit_qkd_key(key).unwrap_or_else(identity)).is_err() {
                                 error!("Error QKD manager sending response");
                             }
                         },
@@ -91,9 +85,9 @@ impl KeyHandler {
                             }
                         },
                         // Add a new SAE ID to the database
-                        QkdManagerCommand::AddSae(sae_id, sae_certificate_serial) => {
+                        QkdManagerCommand::AddSae(sae_id, kme_id, sae_certificate_serial) => {
                             info!("Adding SAE ID {}", sae_id);
-                            if self.response_tx.send(self.add_sae(sae_id, &sae_certificate_serial).unwrap_or_else(identity)).is_err() {
+                            if self.response_tx.send(self.add_sae(sae_id, kme_id, &sae_certificate_serial).unwrap_or_else(identity)).is_err() {
                                 error!("Error QKD manager sending response");
                             }
                         },
@@ -105,15 +99,20 @@ impl KeyHandler {
                             }
                         },
                         QkdManagerCommand::GetSaeInfoFromCertificate(sae_certificate) => {
-                            info!("Getting SAE ID from certificate");
-                            let sae_id = self.get_sae_id_from_certificate(&sae_certificate);
-                            let response = match sae_id {
-                                Some(sae_id) => QkdManagerResponse::SaeInfo(SAEInfo {
-                                    sae_id,
-                                    sae_certificate_serial: sae_certificate,
+                            info!("Getting SAE info from certificate");
+                            let sae_info_response = self.get_sae_infos_from_certificate(&sae_certificate).unwrap_or_else(identity);
+                            if self.response_tx.send(sae_info_response).is_err() {
+                                error!("Error QKD manager sending response");
+                            }
+                        },
+                        QkdManagerCommand::GetKmeIdFromSaeId(sae_id) => {
+                            let kme_id = self.get_kme_id_from_sae_id(sae_id);
+                            let response = match kme_id {
+                                Some(kme_id) => QkdManagerResponse::KmeInfo(KMEInfo {
+                                    kme_id,
                                 }),
                                 None => {
-                                    warn!("SAE certificate not found in database");
+                                    warn!("Get KME ID from SAE ID: SAE ID not found in database");
                                     QkdManagerResponse::NotFound
                                 },
                             };
@@ -130,27 +129,50 @@ impl KeyHandler {
         }
     }
 
-    fn add_sae(&self, sae_id: i64, sae_certificate_serial: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const PREPARED_STATEMENT: &'static str = "INSERT INTO saes (sae_id, sae_certificate_serial) VALUES (?, ?);";
+    /// Add a new SAE ID to the database
+    /// # Arguments
+    /// * `sae_id` - The SAE ID to add
+    /// * `kme_id` - The KME ID to associate with the SAE ID
+    /// * `sae_certificate_serial` - The SAE certificate serial number, None if the SAE isn't supposed to authenticate to this KME
+    fn add_sae(&self, sae_id: SaeId, kme_id: KmeId, sae_certificate_serial: &Option<[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]>) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        const PREPARED_STATEMENT_KNOWN_CERT: &'static str = "INSERT INTO saes (sae_id, kme_id, sae_certificate_serial) VALUES (?, ?, ?);";
+        const PREPARED_STATEMENT_NO_CERT: &'static str = "INSERT INTO saes (sae_id, kme_id) VALUES (?, ?);";
 
-        let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, PREPARED_STATEMENT);
+        let has_provided_certificate = sae_certificate_serial.is_some();
+        let is_this_kme = kme_id == self.this_kme_id;
+        // Has given certificate and doesn't belong to this KME, or doesn't have certificate and belongs to this KME
+        if has_provided_certificate != is_this_kme {
+            return Err(QkdManagerResponse::InconsistentSaeData);
+        }
+
+        let statement = match sae_certificate_serial {
+            Some(_) => PREPARED_STATEMENT_KNOWN_CERT,
+            None => PREPARED_STATEMENT_NO_CERT,
+        };
+
+        let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, statement);
         stmt.bind((1, sae_id)).map_err(|_| {
             QkdManagerResponse::Ko
         })?;
-        stmt.bind((2, sae_certificate_serial.as_bytes())).map_err(|_| {
+        stmt.bind((2, kme_id)).map_err(|_| {
             QkdManagerResponse::Ko
         })?;
+        if sae_certificate_serial.is_some() {
+            stmt.bind((3, sae_certificate_serial.unwrap().as_bytes())).map_err(|_| {
+                QkdManagerResponse::Ko
+            })?;
+        }
         stmt.next().map_err(|_| {
             QkdManagerResponse::Ko
         })?;
         Ok(QkdManagerResponse::Ok)
     }
 
-    fn add_key(&self, key: QkdKey) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const PREPARED_STATEMENT: &'static str = "INSERT INTO keys (key_uuid, key, origin_sae_id, target_sae_id) VALUES (?, ?, ?, ?);";
+    fn add_preinit_qkd_key(&self, pre_init_key: PreInitQkdKeyWrapper) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        const PREPARED_STATEMENT: &'static str = "INSERT INTO uninit_keys (key_uuid, key, other_kme_id) VALUES (?, ?, ?);";
 
         let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, PREPARED_STATEMENT);
-        let uuid_bytes = Bytes::try_from(key.key_uuid).map_err(|_| {
+        let uuid_bytes = Bytes::try_from(pre_init_key.key_uuid).map_err(|_| {
             error!("Error converting UUID to bytes");
             QkdManagerResponse::Ko
         })?;
@@ -158,13 +180,10 @@ impl KeyHandler {
         stmt.bind((1, uuid_str.as_str())).map_err(|_| {
             QkdManagerResponse::Ko
         })?;
-        stmt.bind((2, key.key.as_bytes())).map_err(|_| {
+        stmt.bind((2, pre_init_key.key.as_bytes())).map_err(|_| {
             QkdManagerResponse::Ko
         })?;
-        stmt.bind((3, key.origin_sae_id)).map_err(|_| {
-            QkdManagerResponse::Ko
-        })?;
-        stmt.bind((4, key.target_sae_id)).map_err(|_| {
+        stmt.bind((3, pre_init_key.other_kme_id)).map_err(|_| {
             QkdManagerResponse::Ko
         })?;
         stmt.next().map_err(|_| {
@@ -173,19 +192,17 @@ impl KeyHandler {
         Ok(QkdManagerResponse::Ok)
     }
 
-    fn get_sae_status(&self, origin_sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], target_sae_id: i64) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const PREPARED_STATEMENT: &'static str = "SELECT COUNT(*) FROM keys WHERE target_sae_id = ? and origin_sae_id = ?;";
+    fn get_sae_status(&self, origin_sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], target_sae_id: SaeId) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        const PREPARED_STATEMENT: &'static str = "SELECT COUNT(*) FROM uninit_keys WHERE other_kme_id = ?;";
+
+        let target_kme_id = self.get_kme_id_from_sae_id(target_sae_id).ok_or(QkdManagerResponse::NotFound)?;
 
         // Ensure the origin (master) SAE ID is valid, and get its SAE id
         let origin_sae_id = self.get_sae_id_from_certificate(origin_sae_certificate).ok_or(QkdManagerResponse::AuthenticationError)?;
 
         let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, PREPARED_STATEMENT);
-        stmt.bind((1, target_sae_id)).map_err(|_| {
+        stmt.bind((1, target_kme_id)).map_err(|_| {
             error!("Error binding target SAE ID");
-            QkdManagerResponse::Ko
-        })?;
-        stmt.bind((2, origin_sae_id)).map_err(|_| {
-            error!("Error binding origin SAE ID");
             QkdManagerResponse::Ko
         })?;
         stmt.next().map_err(|_| {
@@ -197,10 +214,12 @@ impl KeyHandler {
             QkdManagerResponse::Ko
         })?;
 
+        let source_kme_id = self.this_kme_id; // This KME
+
         // Create key exchange status response object
         let response_qkd_key_status = qkd_manager::http_response_obj::ResponseQkdKeysStatus {
-            source_KME_ID: crate::THIS_KME_ID.to_string(),
-            target_KME_ID: "?? TODO".to_string(),
+            source_KME_ID: source_kme_id.to_string(),
+            target_KME_ID: target_kme_id.to_string(),
             master_SAE_ID: origin_sae_id.to_string(),
             slave_SAE_ID: target_sae_id.to_string(),
             key_size: crate::QKD_KEY_SIZE_BITS,
@@ -215,19 +234,17 @@ impl KeyHandler {
         Ok(QkdManagerResponse::Status(response_qkd_key_status))
     }
 
-    fn get_sae_keys(&self, origin_sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], target_sae_id: i64) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const PREPARED_STATEMENT: &'static str = "SELECT key_uuid, key FROM keys WHERE target_sae_id = ? and origin_sae_id = ? LIMIT 1;";
+    fn get_sae_keys(&self, origin_sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], target_sae_id: SaeId) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        const FETCH_PREINIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, key_uuid, key, other_kme_id FROM uninit_keys WHERE other_kme_id = ? LIMIT 1;";
 
         // Ensure the origin (master) SAE ID is valid, and get its SAE id
         let origin_sae_id = self.get_sae_id_from_certificate(origin_sae_certificate).ok_or(QkdManagerResponse::AuthenticationError)?;
+        let origin_kme_id = self.this_kme_id;
+        let target_kme_id = self.get_kme_id_from_sae_id(target_sae_id).ok_or(QkdManagerResponse::NotFound)?;
 
-        let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, PREPARED_STATEMENT);
-        stmt.bind((1, target_sae_id)).map_err(|_| {
-            error!("Error binding target SAE ID");
-            QkdManagerResponse::Ko
-        })?;
-        stmt.bind((2, origin_sae_id)).map_err(|_| {
-            error!("Error binding origin SAE ID");
+        let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, FETCH_PREINIT_KEY_PREPARED_STATEMENT);
+        stmt.bind((1, target_kme_id)).map_err(|_| {
+            error!("Error binding target KME ID");
             QkdManagerResponse::Ko
         })?;
         let sql_execution_state = stmt.next().map_err(|_| {
@@ -235,17 +252,53 @@ impl KeyHandler {
             QkdManagerResponse::Ko
         })?;
 
-        // /!\ We only want 1 key here, as multiple keys response isn't supported yet
-
         if sql_execution_state != sqlite::State::Row {
             return Err(QkdManagerResponse::NotFound); // TODO: we could return an empty array instead
         }
-        let key_uuid: String = stmt.read::<String, usize>(0).map_err(|_| {
+
+        let id = stmt.read::<i64, usize>(0).map_err(|_| {
             error!("Error reading SQL statement result");
             QkdManagerResponse::Ko
         })?;
-        let key: Vec<u8> = stmt.read::<Vec<u8>, usize>(1).map_err(|_| {
+        let key_uuid: String = stmt.read::<String, usize>(1).map_err(|_| {
             error!("Error reading SQL statement result");
+            QkdManagerResponse::Ko
+        })?;
+        let key: Vec<u8> = stmt.read::<Vec<u8>, usize>(2).map_err(|_| {
+            error!("Error reading SQL statement result");
+            QkdManagerResponse::Ko
+        })?;
+        if origin_kme_id != target_kme_id {
+            // send key to other KME TODO
+        }
+
+        self.delete_pre_init_key_with_id(id).map_err(|_| {
+            error!("Error deleting pre-init key {}", id);
+            QkdManagerResponse::Ko
+        })?;
+
+        info!("Saving key {} in init keys", key_uuid);
+        const INSERT_INIT_KEY_PREPARED_STATEMENT: &'static str = "INSERT INTO keys (key_uuid, key, origin_sae_id, target_sae_id) VALUES (?, ?, ?, ?);";
+
+        let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, INSERT_INIT_KEY_PREPARED_STATEMENT);
+        stmt.bind((1, key_uuid.as_str())).map_err(|_| {
+            error!("Error binding key UUID");
+            QkdManagerResponse::Ko
+        })?;
+        stmt.bind((2, key.as_slice())).map_err(|_| {
+            error!("Error binding key");
+            QkdManagerResponse::Ko
+        })?;
+        stmt.bind((3, origin_sae_id)).map_err(|_| {
+            error!("Error binding origin SAE ID");
+            QkdManagerResponse::Ko
+        })?;
+        stmt.bind((4, target_sae_id)).map_err(|_| {
+            error!("Error binding target SAE ID");
+            QkdManagerResponse::Ko
+        })?;
+        stmt.next().map_err(|_| {
+            error!("Error executing SQL statement");
             QkdManagerResponse::Ko
         })?;
 
@@ -261,7 +314,32 @@ impl KeyHandler {
         }))
     }
 
-    fn get_sae_keys_with_ids(&self, current_sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], origin_sae_id: i64, keys_uuids: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    /// Delete a pre-init key from the pre-init keys database
+    /// Called when master SAE requested the key: it becomes an init key
+    /// So that the same key isn't requested again by a master SAE
+    /// # Arguments
+    /// * `key_id` - The ID of the pre init key to delete
+    /// # Returns
+    /// Ok if the key was deleted, an error otherwise
+    fn delete_pre_init_key_with_id(&self, key_id: i64) -> Result<(), io::Error> {
+        const PREPARED_STATEMENT: &'static str = "DELETE FROM uninit_keys WHERE id = ?;";
+
+        let mut stmt = match self.sqlite_db.prepare(PREPARED_STATEMENT) {
+            Ok(stmt) => stmt,
+            Err(_) => {
+                return Err(io_err("Error preparing SQL statement"));
+            }
+        };
+        stmt.bind((1, key_id)).map_err(|_| {
+            io_err("Error binding key ID")
+        })?;
+        stmt.next().map_err(|_| {
+            io_err("Error executing SQL statement, maybe key ID not found in pre init keys database?")
+        })?;
+        Ok(())
+    }
+
+    fn get_sae_keys_with_ids(&self, current_sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], origin_sae_id: SaeId, keys_uuids: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const PREPARED_STATEMENT: &'static str = "SELECT key_uuid, key FROM keys WHERE target_sae_id = ? AND origin_sae_id = ? AND key_uuid = ? LIMIT 1;";
 
         // Ensure the caller (slave) SAE ID is valid and authenticated, and get its SAE id
@@ -319,7 +397,7 @@ impl KeyHandler {
     /// * `sae_certificate` - The client certificate serial number
     /// # Returns
     /// The SAE ID if the certificate serial number is found in the database, None otherwise
-    fn get_sae_id_from_certificate(&self, sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Option<i64> {
+    fn get_sae_id_from_certificate(&self, sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Option<SaeId> {
         const PREPARED_STATEMENT: &'static str = "SELECT sae_id FROM saes WHERE sae_certificate_serial = ? LIMIT 1;";
         let mut stmt = match self.sqlite_db.prepare(PREPARED_STATEMENT) {
             Ok(stmt) => stmt,
@@ -345,6 +423,73 @@ impl KeyHandler {
             ()
         }).ok()?;
         Some(sae_id)
+    }
+
+    /// Get the KME ID from associated SAE ID
+    /// # Arguments
+    /// * `sae_id` - The SAE ID
+    /// # Returns
+    /// The KME ID if the SAE ID is found in the database, None otherwise
+    fn get_kme_id_from_sae_id(&self, sae_id: SaeId) -> Option<KmeId> {
+        const PREPARED_STATEMENT: &'static str = "SELECT kme_id FROM saes WHERE sae_id = ? LIMIT 1;";
+        let mut stmt = match self.sqlite_db.prepare(PREPARED_STATEMENT) {
+            Ok(stmt) => stmt,
+            Err(_) => {
+                error!("Error preparing SQL statement");
+                return None;
+            }
+        };
+        stmt.bind((1, sae_id)).map_err(|_| {
+            error!("Error binding SAE ID");
+            ()
+        }).ok()?;
+        let sql_execution_state = stmt.next().map_err(|_| {
+            error!("Error executing SQL statement");
+            ()
+        }).ok()?;
+        if sql_execution_state != sqlite::State::Row {
+            info!("SAE ID not found in database");
+            return None;
+        }
+        let kme_id: i64 = stmt.read::<i64, usize>(0).map_err(|_| {
+            error!("Error reading SQL statement result");
+            ()
+        }).ok()?;
+        Some(kme_id)
+    }
+
+    /// Directly fetch SAE info from the certificate serial number, including the SAE ID and KME ID
+    /// # Arguments
+    /// * `sae_certificate` - The client SAE certificate serial number
+    /// # Returns
+    /// The SAE info, including KME ID, if the certificate serial number is found in the database, an error otherwise
+    fn get_sae_infos_from_certificate(&self, sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        const PREPARED_STATEMENT: &'static str = "SELECT sae_id, kme_id FROM saes WHERE sae_certificate_serial = ? LIMIT 1;";
+        let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, PREPARED_STATEMENT);
+        stmt.bind((1, sae_certificate.as_bytes())).map_err(|_| {
+            error!("Error binding SAE certificate serial");
+            QkdManagerResponse::Ko
+        })?;
+        let sql_execution_state = stmt.next().map_err(|_| {
+            error!("Error executing SQL statement");
+            QkdManagerResponse::Ko
+        })?;
+        if sql_execution_state != sqlite::State::Row {
+            return Err(QkdManagerResponse::NotFound);
+        }
+        let sae_id: SaeId = stmt.read::<SaeId, usize>(0).map_err(|_| {
+            error!("Error reading SQL statement result");
+            QkdManagerResponse::Ko
+        })?;
+        let kme_id: KmeId = stmt.read::<KmeId, usize>(1).map_err(|_| {
+            error!("Error reading SQL statement result");
+            QkdManagerResponse::Ko
+        })?;
+        Ok(QkdManagerResponse::SaeInfo(SAEInfo {
+            sae_id,
+            kme_id,
+            sae_certificate_serial: *sae_certificate,
+        }))
     }
 }
 
@@ -373,10 +518,11 @@ mod tests {
     fn test_get_sae_id_from_certificate() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx).unwrap();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
         let sae_id = 1;
+        let kme_id = 1;
         let sae_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
-        key_handler.add_sae(sae_id, &sae_certificate_serial).unwrap();
+        key_handler.add_sae(sae_id, kme_id, &Some(sae_certificate_serial)).unwrap();
         assert_eq!(key_handler.get_sae_id_from_certificate(&sae_certificate_serial).unwrap(), sae_id);
 
         let fake_sae_certificate_serial = [1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
@@ -384,27 +530,26 @@ mod tests {
     }
 
     #[test]
-    fn test_add_key() {
+    fn test_add_preinit_key() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx).unwrap();
-        let key = crate::qkd_manager::QkdKey {
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let key = crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
             key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
             key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
-            origin_sae_id: 1,
-            target_sae_id: 2,
         };
-        key_handler.add_key(key).unwrap();
+        key_handler.add_preinit_qkd_key(key).unwrap();
     }
 
     #[test]
     fn test_get_sae_status() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx).unwrap();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
         let sae_id = 1;
         let sae_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
-        key_handler.add_sae(sae_id, &sae_certificate_serial).unwrap();
+        key_handler.add_sae(sae_id, 1, &Some(sae_certificate_serial)).unwrap();
         let qkd_manager_response = key_handler.get_sae_status(&sae_certificate_serial, sae_id).unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Status(_)));
         let response_status = match qkd_manager_response {
@@ -413,17 +558,20 @@ mod tests {
                 panic!("Unexpected response");
             }
         };
-        assert_eq!(response_status.to_json().unwrap(), "{\n  \"source_KME_ID\": \"1\",\n  \"target_KME_ID\": \"?? TODO\",\n  \"master_SAE_ID\": \"1\",\n  \"slave_SAE_ID\": \"1\",\n  \"key_size\": 256,\n  \"stored_key_count\": 0,\n  \"max_key_count\": 10,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 256,\n  \"min_key_size\": 256,\n  \"max_SAE_ID_count\": 0\n}");
+        assert_eq!(response_status.to_json().unwrap(), "{\n  \"source_KME_ID\": \"1\",\n  \"target_KME_ID\": \"1\",\n  \"master_SAE_ID\": \"1\",\n  \"slave_SAE_ID\": \"1\",\n  \"key_size\": 256,\n  \"stored_key_count\": 0,\n  \"max_key_count\": 10,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 256,\n  \"min_key_size\": 256,\n  \"max_SAE_ID_count\": 0\n}");
 
 
-        // add key for another SAE id
-        let key = crate::qkd_manager::QkdKey {
+        // add key for another KME id
+        let key = crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 2,
             key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
             key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
-            origin_sae_id: 1,
-            target_sae_id: 3,
         };
-        key_handler.add_key(key).unwrap();
+        key_handler.add_preinit_qkd_key(key).unwrap();
+        let qkd_manager_response = key_handler.get_sae_status(&sae_certificate_serial, 2);
+        assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
+
+        key_handler.add_sae(2, 1, &Some([1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let qkd_manager_response = key_handler.get_sae_status(&sae_certificate_serial, 2).unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Status(_)));
         let response_status = match qkd_manager_response {
@@ -432,16 +580,15 @@ mod tests {
                 panic!("Unexpected response");
             }
         };
-        assert_eq!(response_status.to_json().unwrap(), "{\n  \"source_KME_ID\": \"1\",\n  \"target_KME_ID\": \"?? TODO\",\n  \"master_SAE_ID\": \"1\",\n  \"slave_SAE_ID\": \"2\",\n  \"key_size\": 256,\n  \"stored_key_count\": 0,\n  \"max_key_count\": 10,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 256,\n  \"min_key_size\": 256,\n  \"max_SAE_ID_count\": 0\n}");
+        assert_eq!(response_status.to_json().unwrap(), "{\n  \"source_KME_ID\": \"1\",\n  \"target_KME_ID\": \"1\",\n  \"master_SAE_ID\": \"1\",\n  \"slave_SAE_ID\": \"2\",\n  \"key_size\": 256,\n  \"stored_key_count\": 0,\n  \"max_key_count\": 10,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 256,\n  \"min_key_size\": 256,\n  \"max_SAE_ID_count\": 0\n}");
 
         // add key
-        let key = crate::qkd_manager::QkdKey {
+        let key = crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
             key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
             key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
-            origin_sae_id: 1,
-            target_sae_id: 2,
         };
-        key_handler.add_key(key).unwrap();
+        key_handler.add_preinit_qkd_key(key).unwrap();
         let qkd_manager_response = key_handler.get_sae_status(&sae_certificate_serial, 2).unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Status(_)));
         let response_status = match qkd_manager_response {
@@ -450,28 +597,41 @@ mod tests {
                 panic!("Unexpected response");
             }
         };
-        assert_eq!(response_status.to_json().unwrap(), "{\n  \"source_KME_ID\": \"1\",\n  \"target_KME_ID\": \"?? TODO\",\n  \"master_SAE_ID\": \"1\",\n  \"slave_SAE_ID\": \"2\",\n  \"key_size\": 256,\n  \"stored_key_count\": 1,\n  \"max_key_count\": 10,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 256,\n  \"min_key_size\": 256,\n  \"max_SAE_ID_count\": 0\n}");
+        assert_eq!(response_status.to_json().unwrap(), "{\n  \"source_KME_ID\": \"1\",\n  \"target_KME_ID\": \"1\",\n  \"master_SAE_ID\": \"1\",\n  \"slave_SAE_ID\": \"2\",\n  \"key_size\": 256,\n  \"stored_key_count\": 1,\n  \"max_key_count\": 10,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 256,\n  \"min_key_size\": 256,\n  \"max_SAE_ID_count\": 0\n}");
     }
 
     #[test]
     fn test_get_sae_keys() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx).unwrap();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
         let sae_id = 1;
+        let kme_id = 1;
         let sae_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
-        key_handler.add_sae(sae_id, &sae_certificate_serial).unwrap();
+        key_handler.add_sae(sae_id, kme_id, &Some(sae_certificate_serial)).unwrap();
         let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, sae_id);
         assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
 
         // add key
-        let key = crate::qkd_manager::QkdKey {
+        let key = crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
             key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
             key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
-            origin_sae_id: 1,
-            target_sae_id: 2,
         };
-        key_handler.add_key(key).unwrap();
+        key_handler.add_preinit_qkd_key(key).unwrap();
+
+        // add key
+        let key = crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
+            key_uuid: *uuid::Uuid::from_bytes([1u8; 16]).as_bytes(),
+            key: [1u8; crate::QKD_KEY_SIZE_BITS / 8],
+        };
+        key_handler.add_preinit_qkd_key(key).unwrap();
+
+        let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, 2);
+        assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
+
+        key_handler.add_sae(2, kme_id, &Some([1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, 2).unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
         let response_keys = match qkd_manager_response {
@@ -484,32 +644,53 @@ mod tests {
         assert_eq!(response_keys.keys[0].key_ID, "00000000-0000-0000-0000-000000000000");
         assert_eq!(response_keys.keys[0].key, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
         assert_eq!(response_keys.to_json().unwrap(), "{\n  \"keys\": [\n    {\n      \"key_ID\": \"00000000-0000-0000-0000-000000000000\",\n      \"key\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"\n    }\n  ]\n}");
+
+
+        // Same request
+        let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, 2).unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
+        let response_keys = match qkd_manager_response {
+            QkdManagerResponse::Keys(keys) => keys,
+            _ => {
+                panic!("Unexpected response");
+            }
+        };
+        assert_eq!(response_keys.keys.len(), 1);
+        // Not the same key
+        assert_eq!(response_keys.keys[0].key_ID, "01010101-0101-0101-0101-010101010101");
+        assert_eq!(response_keys.keys[0].key, "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=");
+        assert_eq!(response_keys.to_json().unwrap(), "{\n  \"keys\": [\n    {\n      \"key_ID\": \"01010101-0101-0101-0101-010101010101\",\n      \"key\": \"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=\"\n    }\n  ]\n}");
     }
 
     #[test]
     fn test_get_sae_keys_with_ids() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx).unwrap();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
         let sae_id = 1;
+        let kme_id = 1;
         let sae_1_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
         let sae_2_certificate_serial = [1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
-        key_handler.add_sae(sae_id, &sae_1_certificate_serial).unwrap();
-        key_handler.add_sae(2, &sae_2_certificate_serial).unwrap();
+        key_handler.add_sae(sae_id, kme_id, &Some(sae_1_certificate_serial)).unwrap();
+        key_handler.add_sae(2, kme_id, &Some(sae_2_certificate_serial)).unwrap();
         let qkd_manager_response = key_handler.get_sae_keys_with_ids(&sae_1_certificate_serial, sae_id, vec!["00000000-0000-0000-0000-000000000000".to_string()]);
         assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
 
         // add key
-        let key = crate::qkd_manager::QkdKey {
+        let key = crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
             key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
             key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
-            origin_sae_id: 1,
-            target_sae_id: 2,
         };
-        key_handler.add_key(key).unwrap();
+        key_handler.add_preinit_qkd_key(key).unwrap();
 
+        // SAE1 has to pre fetch the key first
+        let qkd_manager_response = key_handler.get_sae_keys_with_ids(&sae_2_certificate_serial, 1, vec!["00000000-0000-0000-0000-000000000000".to_string()]);
+        assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
 
+        assert!(matches!(key_handler.get_sae_keys(&sae_1_certificate_serial, 2).unwrap(), QkdManagerResponse::Keys(_)));
         let qkd_manager_response = key_handler.get_sae_keys_with_ids(&sae_2_certificate_serial, 1, vec!["00000000-0000-0000-0000-000000000000".to_string()]).unwrap();
+
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
         let response_keys = match qkd_manager_response {
             QkdManagerResponse::Keys(keys) => keys,
@@ -527,16 +708,68 @@ mod tests {
     }
 
     #[test]
+    fn test_get_kme_id_from_sae() {
+        let (_, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, _) = crossbeam_channel::unbounded();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let sae_id = 1;
+        let kme_id = 1;
+        let sae_1_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
+        key_handler.add_sae(sae_id, kme_id, &Some(sae_1_certificate_serial)).unwrap();
+        let kme_id = key_handler.get_kme_id_from_sae_id(sae_id).unwrap();
+        assert_eq!(kme_id, 1);
+        let kme_id = key_handler.get_kme_id_from_sae_id(2);
+        assert!(matches!(kme_id, None));
+    }
+
+    #[test]
+    fn test_get_sae_infos_from_certificate() {
+        let (_, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, _) = crossbeam_channel::unbounded();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let sae_id = 1;
+        let kme_id = 1;
+
+        let sae_info = key_handler.get_sae_infos_from_certificate(&[0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        assert!(matches!(sae_info, Err(QkdManagerResponse::NotFound)));
+
+        key_handler.add_sae(sae_id, kme_id, &Some([0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        let sae_info = key_handler.get_sae_infos_from_certificate(&[0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]).unwrap();
+        assert!(matches!(sae_info, QkdManagerResponse::SaeInfo(_)));
+        assert_eq!(sae_info, QkdManagerResponse::SaeInfo(super::SAEInfo {
+            sae_id,
+            kme_id,
+            sae_certificate_serial: [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES],
+        }));
+    }
+
+    #[test]
+    fn test_delete_pre_init_key_with_id() {
+        let (_, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, _) = crossbeam_channel::unbounded();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let key = crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
+            key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
+            key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
+        };
+        key_handler.add_preinit_qkd_key(key).unwrap();
+        let key_id = 1; // As it's the first key, we can assume it's the ID
+        key_handler.delete_pre_init_key_with_id(key_id).unwrap();
+    }
+
+    #[test]
     fn test_run() {
         let (command_tx, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, response_rx) = crossbeam_channel::unbounded();
-        let mut key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx).unwrap();
+        let mut key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
         let sae_id = 1;
+        let kme_id = 1;
         let sae_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
         let _ = thread::spawn(move || {
             key_handler.run();
         });
-        command_tx.send(super::QkdManagerCommand::AddSae(sae_id, sae_certificate_serial)).unwrap();
+        command_tx.send(super::QkdManagerCommand::AddSae(sae_id, kme_id, Some(sae_certificate_serial))).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
 
@@ -545,19 +778,26 @@ mod tests {
         assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
 
         // add key
-        let key = crate::qkd_manager::QkdKey {
+        let key = crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
             key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
             key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
-            origin_sae_id: 1,
-            target_sae_id: 2,
         };
-        command_tx.send(super::QkdManagerCommand::AddKey(key)).unwrap();
+        command_tx.send(super::QkdManagerCommand::AddPreInitKey(key)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
 
         command_tx.send(super::QkdManagerCommand::GetKeysWithIds(sae_certificate_serial, 1, vec!["00000000-0000-0000-0000-000000000000".to_string()])).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
+
+        command_tx.send(super::QkdManagerCommand::GetStatus(sae_certificate_serial, 2)).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
+
+        command_tx.send(super::QkdManagerCommand::AddSae(2, kme_id, Some([1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]))).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
 
         command_tx.send(super::QkdManagerCommand::GetStatus(sae_certificate_serial, 2)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
@@ -568,10 +808,21 @@ mod tests {
         assert!(matches!(qkd_manager_response, QkdManagerResponse::SaeInfo(_)));
         assert_eq!(qkd_manager_response, QkdManagerResponse::SaeInfo(super::SAEInfo {
             sae_id,
+            kme_id,
             sae_certificate_serial,
         }));
 
-        command_tx.send(super::QkdManagerCommand::GetSaeInfoFromCertificate([1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        command_tx.send(super::QkdManagerCommand::GetSaeInfoFromCertificate([2u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
+
+        command_tx.send(super::QkdManagerCommand::GetKmeIdFromSaeId(sae_id)).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::KmeInfo(_)));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::KmeInfo(super::KMEInfo {
+            kme_id,
+        }));
+        command_tx.send(super::QkdManagerCommand::GetKmeIdFromSaeId(3)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
     }

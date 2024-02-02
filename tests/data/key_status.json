@@ -1,10 +1,10 @@
 {
   "source_KME_ID": "1",
-  "target_KME_ID": "?? TODO",
+  "target_KME_ID": "1",
   "master_SAE_ID": "1",
-  "slave_SAE_ID": "2",
+  "slave_SAE_ID": "1",
   "key_size": 256,
-  "stored_key_count": 1,
+  "stored_key_count": 2,
   "max_key_count": 10,
   "max_key_per_request": 1,
   "max_key_size": 256,

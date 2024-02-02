@@ -29,6 +29,9 @@ fn io_err(e: &str) -> io::Error {
 /// The size of the QKD key in bytes. This is equal to QKD_MIN_KEY_SIZE_BITS and QKD_MAX_KEY_SIZE_BITS, as we offer no flexibility in key size
 pub const QKD_KEY_SIZE_BITS: usize = 256;
 
+/// The size of the QKD key in bytes
+pub const QKD_KEY_SIZE_BYTES: usize = QKD_KEY_SIZE_BITS / 8;
+
 /// The minimum size of the QKD key in bits, returned in HTTP responses
 pub const QKD_MIN_KEY_SIZE_BITS: usize = 256;
 
@@ -50,8 +53,14 @@ pub const CLIENT_CERT_SERIAL_SIZE_BYTES: usize = 20;
 /// Location of the SQLite database file used by the KME to store keys, use ":memory:" for in-memory database
 pub const MEMORY_SQLITE_DB_PATH: &'static str = ":memory:";
 
-/// The ID of this KME, used to identify the KME in the database and across the network
-pub const THIS_KME_ID: i64 = 1; // TODO: change
+/// The type of SAE ID
+pub type SaeId = i64;
+
+/// The type of KME ID
+pub type KmeId = i64;
+
+/// Type for QKD encryption key: basically a byte array
+pub type QkdEncKey = [u8; QKD_KEY_SIZE_BYTES];
 
 #[cfg(test)]
 mod test {

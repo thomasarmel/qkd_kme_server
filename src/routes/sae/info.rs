@@ -20,8 +20,8 @@ pub(in crate::routes) async fn route_get_info_me(rcx: &RequestContext<'_>, _req:
         }
     };
     // Retrieve the SAE ID from the QKD manager, given the client certificate serial
-    let sae_id = match rcx.qkd_manager.get_sae_info_from_client_auth_certificate(client_cert_serial) {
-        Ok(sae_id) => sae_id.sae_id,
+    let sae_info = match rcx.qkd_manager.get_sae_info_from_client_auth_certificate(client_cert_serial) {
+        Ok(sae_info) => sae_info,
         Err(_) => {
             // Client certificate serial isn't registered in the QKD manager
             return crate::routes::QKDKMERoutesV1::not_found()
@@ -30,7 +30,8 @@ pub(in crate::routes) async fn route_get_info_me(rcx: &RequestContext<'_>, _req:
 
     // Create the response object
     let sae_info_response_obj = crate::qkd_manager::http_response_obj::ResponseQkdSAEInfo {
-        SAE_ID: sae_id,
+        SAE_ID: sae_info.sae_id,
+        KME_ID: sae_info.kme_id,
     };
     match sae_info_response_obj.to_json() {
         Ok(json) => {

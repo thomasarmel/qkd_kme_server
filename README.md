@@ -52,7 +52,7 @@ Response example:
 ```json
 {
   "source_KME_ID": "1",
-  "target_KME_ID": "?? TODO",
+  "target_KME_ID": "2",
   "master_SAE_ID": "1",
   "slave_SAE_ID": "2",
   "key_size": 256,

@@ -102,7 +102,7 @@ mod test {
 
     #[test]
     fn test_context_no_cert() {
-        let context = super::RequestContext::new(None, crate::qkd_manager::QkdManager::new(":memory:")).unwrap();
+        let context = super::RequestContext::new(None, crate::qkd_manager::QkdManager::new(":memory:", 1)).unwrap();
         assert!(!context.has_client_certificate());
         assert!(context.get_client_certificate_cn().is_err());
         assert!(context.get_client_certificate_serial_as_string().is_err());
@@ -114,7 +114,7 @@ mod test {
         const CERT_FILENAME: &'static str = "certs/kme1.crt";
         let certs = load_cert(CERT_FILENAME).unwrap();
         assert_eq!(certs.len(), 1);
-        let context = super::RequestContext::new(Some(&certs[0]), crate::qkd_manager::QkdManager::new(":memory:")).unwrap();
+        let context = super::RequestContext::new(Some(&certs[0]), crate::qkd_manager::QkdManager::new(":memory:", 1)).unwrap();
         assert!(context.has_client_certificate());
         assert_eq!(context.get_client_certificate_cn().unwrap(), "localhost");
         assert_eq!(context.get_client_certificate_serial_as_string().unwrap(), "70:f4:4f:56:0c:3f:27:d4:b2:11:a4:78:13:af:d0:3c:03:81:3b:8d");
