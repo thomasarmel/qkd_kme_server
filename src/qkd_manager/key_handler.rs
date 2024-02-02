@@ -4,7 +4,7 @@ use std::convert::identity;
 use std::io;
 use uuid::Bytes;
 use x509_parser::nom::AsBytes;
-use crate::{io_err, KmeId, qkd_manager, SaeId};
+use crate::{io_err, KmeId, qkd_manager, SaeClientCertSerial, SaeId};
 use crate::qkd_manager::{KMEInfo, PreInitQkdKeyWrapper, QkdManagerCommand, QkdManagerResponse, SAEInfo};
 use base64::{engine::general_purpose, Engine as _};
 use log::{error, info, warn};
@@ -34,7 +34,7 @@ impl KeyHandler {
     /// A new key handler
     /// # Errors
     /// If the sqlite database cannot be opened or if the tables cannot be created
-    pub(super) fn new(sqlite_db_path: &str, command_rx: crossbeam_channel::Receiver<QkdManagerCommand>, response_tx: crossbeam_channel::Sender<QkdManagerResponse>, this_kme_id: i64) -> Result<Self, io::Error> {
+    pub(super) fn new(sqlite_db_path: &str, command_rx: crossbeam_channel::Receiver<QkdManagerCommand>, response_tx: crossbeam_channel::Sender<QkdManagerResponse>, this_kme_id: KmeId) -> Result<Self, io::Error> {
         const DATABASE_INIT_REQ: &'static str = include_str!("init_qkd_database.sql");
 
         let key_handler = Self {
@@ -134,7 +134,7 @@ impl KeyHandler {
     /// * `sae_id` - The SAE ID to add
     /// * `kme_id` - The KME ID to associate with the SAE ID
     /// * `sae_certificate_serial` - The SAE certificate serial number, None if the SAE isn't supposed to authenticate to this KME
-    fn add_sae(&self, sae_id: SaeId, kme_id: KmeId, sae_certificate_serial: &Option<[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]>) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    fn add_sae(&self, sae_id: SaeId, kme_id: KmeId, sae_certificate_serial: &Option<SaeClientCertSerial>) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const PREPARED_STATEMENT_KNOWN_CERT: &'static str = "INSERT INTO saes (sae_id, kme_id, sae_certificate_serial) VALUES (?, ?, ?);";
         const PREPARED_STATEMENT_NO_CERT: &'static str = "INSERT INTO saes (sae_id, kme_id) VALUES (?, ?);";
 
@@ -192,7 +192,7 @@ impl KeyHandler {
         Ok(QkdManagerResponse::Ok)
     }
 
-    fn get_sae_status(&self, origin_sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], target_sae_id: SaeId) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    fn get_sae_status(&self, origin_sae_certificate: &SaeClientCertSerial, target_sae_id: SaeId) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const PREPARED_STATEMENT: &'static str = "SELECT COUNT(*) FROM uninit_keys WHERE other_kme_id = ?;";
 
         let target_kme_id = self.get_kme_id_from_sae_id(target_sae_id).ok_or(QkdManagerResponse::NotFound)?;
@@ -234,7 +234,7 @@ impl KeyHandler {
         Ok(QkdManagerResponse::Status(response_qkd_key_status))
     }
 
-    fn get_sae_keys(&self, origin_sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], target_sae_id: SaeId) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    fn get_sae_keys(&self, origin_sae_certificate: &SaeClientCertSerial, target_sae_id: SaeId) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const FETCH_PREINIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, key_uuid, key, other_kme_id FROM uninit_keys WHERE other_kme_id = ? LIMIT 1;";
 
         // Ensure the origin (master) SAE ID is valid, and get its SAE id
@@ -339,7 +339,7 @@ impl KeyHandler {
         Ok(())
     }
 
-    fn get_sae_keys_with_ids(&self, current_sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], origin_sae_id: SaeId, keys_uuids: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    fn get_sae_keys_with_ids(&self, current_sae_certificate: &SaeClientCertSerial, origin_sae_id: SaeId, keys_uuids: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const PREPARED_STATEMENT: &'static str = "SELECT key_uuid, key FROM keys WHERE target_sae_id = ? AND origin_sae_id = ? AND key_uuid = ? LIMIT 1;";
 
         // Ensure the caller (slave) SAE ID is valid and authenticated, and get its SAE id
@@ -397,7 +397,7 @@ impl KeyHandler {
     /// * `sae_certificate` - The client certificate serial number
     /// # Returns
     /// The SAE ID if the certificate serial number is found in the database, None otherwise
-    fn get_sae_id_from_certificate(&self, sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Option<SaeId> {
+    fn get_sae_id_from_certificate(&self, sae_certificate: &SaeClientCertSerial) -> Option<SaeId> {
         const PREPARED_STATEMENT: &'static str = "SELECT sae_id FROM saes WHERE sae_certificate_serial = ? LIMIT 1;";
         let mut stmt = match self.sqlite_db.prepare(PREPARED_STATEMENT) {
             Ok(stmt) => stmt,
@@ -418,7 +418,7 @@ impl KeyHandler {
             info!("SAE certificate not found in database");
             return None;
         }
-        let sae_id: i64 = stmt.read::<i64, usize>(0).map_err(|_| {
+        let sae_id: SaeId = stmt.read::<SaeId, usize>(0).map_err(|_| {
             error!("Error reading SQL statement result");
             ()
         }).ok()?;
@@ -451,7 +451,7 @@ impl KeyHandler {
             info!("SAE ID not found in database");
             return None;
         }
-        let kme_id: i64 = stmt.read::<i64, usize>(0).map_err(|_| {
+        let kme_id: KmeId = stmt.read::<KmeId, usize>(0).map_err(|_| {
             error!("Error reading SQL statement result");
             ()
         }).ok()?;
@@ -463,7 +463,7 @@ impl KeyHandler {
     /// * `sae_certificate` - The client SAE certificate serial number
     /// # Returns
     /// The SAE info, including KME ID, if the certificate serial number is found in the database, an error otherwise
-    fn get_sae_infos_from_certificate(&self, sae_certificate: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    fn get_sae_infos_from_certificate(&self, sae_certificate: &SaeClientCertSerial) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const PREPARED_STATEMENT: &'static str = "SELECT sae_id, kme_id FROM saes WHERE sae_certificate_serial = ? LIMIT 1;";
         let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, PREPARED_STATEMENT);
         stmt.bind((1, sae_certificate.as_bytes())).map_err(|_| {

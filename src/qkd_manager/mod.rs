@@ -10,7 +10,7 @@ use log::error;
 use sha1::Digest;
 use crate::qkd_manager::http_response_obj::ResponseQkdKeysList;
 use crate::qkd_manager::QkdManagerResponse::TransmissionError;
-use crate::{KmeId, QkdEncKey, SaeId};
+use crate::{KmeId, QkdEncKey, SaeClientCertSerial, SaeId};
 
 /// QKD manager interface, can be cloned for instance in each request handler task
 #[derive(Clone)]
@@ -29,7 +29,7 @@ impl QkdManager {
     /// A new QKD manager handler
     /// # Notes
     /// This function spawns a new thread to handle the QKD manager
-    pub fn new(sqlite_db_path: &str, this_kme_id: i64) -> Self {
+    pub fn new(sqlite_db_path: &str, this_kme_id: KmeId) -> Self {
         // crossbeam_channel allows cloning the sender and receiver
         let (command_tx, command_rx) = crossbeam_channel::unbounded::<QkdManagerCommand>();
         let (response_tx, response_rx) = crossbeam_channel::unbounded::<QkdManagerResponse>();
@@ -75,7 +75,7 @@ impl QkdManager {
     /// * `auth_client_cert_serial` - The serial number of the client certificate of caller the master SAE, to authenticate and identify the caller
     /// # Returns
     /// The requested QKD key if the key was found and the caller is authorized to retrieve it, an error otherwise
-    pub fn get_qkd_key(&self, target_sae_id: i64, auth_client_cert_serial: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    pub fn get_qkd_key(&self, target_sae_id: SaeId, auth_client_cert_serial: &SaeClientCertSerial) -> Result<QkdManagerResponse, QkdManagerResponse> {
         self.command_tx.send(QkdManagerCommand::GetKeys(*auth_client_cert_serial, target_sae_id)).map_err(|_| {
             TransmissionError
         })?;
@@ -96,7 +96,7 @@ impl QkdManager {
     /// * `keys_uuids` - The list of UUIDs of the keys sent by master SAE that the slave SAE wants to retrieve
     /// # Returns
     /// The requested QKD keys if the keys were found and the caller is authorized to retrieve them, an error otherwise
-    pub fn get_qkd_keys_with_ids(&self, source_sae_id: i64, auth_client_cert_serial: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], keys_uuids: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    pub fn get_qkd_keys_with_ids(&self, source_sae_id: SaeId, auth_client_cert_serial: &SaeClientCertSerial, keys_uuids: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
         self.command_tx.send(QkdManagerCommand::GetKeysWithIds(*auth_client_cert_serial, source_sae_id, keys_uuids)).map_err(|_| {
             TransmissionError
         })?;
@@ -118,7 +118,7 @@ impl QkdManager {
     /// Ok if the SAE was added successfully, an error otherwise
     /// # Notes
     /// It will fail if the SAE ID is already in the database
-    pub fn add_sae(&self, sae_id: SaeId, kme_id: KmeId, sae_certificate_serial: &Option<[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]>) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    pub fn add_sae(&self, sae_id: SaeId, kme_id: KmeId, sae_certificate_serial: &Option<SaeClientCertSerial>) -> Result<QkdManagerResponse, QkdManagerResponse> {
         self.command_tx.send(QkdManagerCommand::AddSae(sae_id, kme_id, *sae_certificate_serial)).map_err(|_| {
             TransmissionError
         })?;
@@ -136,7 +136,7 @@ impl QkdManager {
     /// * `target_sae_id` - The ID of the target (slave) SAE, to which master SAE wants to communicate
     /// # Returns
     /// The status of the key exchange if the key exchange was found and the caller is authorized to retrieve it, an error otherwise
-    pub fn get_qkd_key_status(&self, origin_sae_certificate_serial: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], target_sae_id: SaeId) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    pub fn get_qkd_key_status(&self, origin_sae_certificate_serial: &SaeClientCertSerial, target_sae_id: SaeId) -> Result<QkdManagerResponse, QkdManagerResponse> {
         self.command_tx.send(QkdManagerCommand::GetStatus(*origin_sae_certificate_serial, target_sae_id)).map_err(|_| {
             TransmissionError
         })?;
@@ -153,7 +153,7 @@ impl QkdManager {
     /// * `client_certificate_serial` - The serial number of the client certificate of the SAE, to authenticate and identify the caller
     /// # Returns
     /// The SAE information (like SAE ID) if the SAE was found, an error otherwise
-    pub fn get_sae_info_from_client_auth_certificate(&self, client_certificate_serial: &[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]) -> Result<SAEInfo, QkdManagerResponse> {
+    pub fn get_sae_info_from_client_auth_certificate(&self, client_certificate_serial: &SaeClientCertSerial) -> Result<SAEInfo, QkdManagerResponse> {
         self.command_tx.send(QkdManagerCommand::GetSaeInfoFromCertificate(*client_certificate_serial)).map_err(|_| {
             TransmissionError
         })?;
@@ -241,7 +241,7 @@ pub struct SAEInfo {
     /// The ID of the KME the SAE belongs to
     pub(crate) kme_id: KmeId,
     /// The serial number of the client certificate identifying the SAE
-    pub(crate) sae_certificate_serial: [u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES],
+    pub(crate) sae_certificate_serial: SaeClientCertSerial,
 }
 
 /// Describes information about a KME
@@ -257,15 +257,15 @@ enum QkdManagerCommand {
     /// Add a new pre-init QKD key to the database: it will be available for SAEs to request it if there are connected to the right KMEs
     AddPreInitKey(PreInitQkdKeyWrapper),
     /// Get a QKD key from the database (shall be called by the master SAE)
-    GetKeys([u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], SaeId), // origin certificate + target id
+    GetKeys(SaeClientCertSerial, SaeId), // origin certificate + target id
     /// Get a list of QKD keys from the database (shall be called by the slave SAE)
-    GetKeysWithIds([u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], SaeId, Vec<String>), // origin certificate + target id
+    GetKeysWithIds(SaeClientCertSerial, SaeId, Vec<String>), // origin certificate + target id
     /// Get the status of a key exchange between two SAEs (shall be called by the master SAE)
-    GetStatus([u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES], SaeId), // origin certificate + target id
+    GetStatus(SaeClientCertSerial, SaeId), // origin certificate + target id
     /// Add a new SAE to the database (shall be called before SAEs start requesting KME)
-    AddSae(SaeId, KmeId, Option<[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]>), // target id + KME id + target certificate
+    AddSae(SaeId, KmeId, Option<SaeClientCertSerial>), // target id + KME id + target certificate
     /// Get information about a SAE from its client auth certificate
-    GetSaeInfoFromCertificate([u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]), // caller's certificate
+    GetSaeInfoFromCertificate(SaeClientCertSerial), // caller's certificate
     /// Returns the KME ID from belonging SAE ID
     GetKmeIdFromSaeId(SaeId), // SAE id
 }

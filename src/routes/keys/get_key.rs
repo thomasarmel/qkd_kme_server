@@ -10,7 +10,7 @@ use hyper::body::Bytes;
 use std::string::String;
 use log::{error, warn};
 use crate::qkd_manager::http_request_obj::RequestListKeysIds;
-use crate::ensure_sae_id_integer;
+use crate::{ensure_sae_id_format_type, SaeId};
 use crate::ensure_client_certificate_serial;
 
 
@@ -26,7 +26,7 @@ pub(in crate::routes) fn route_get_status(rcx: &RequestContext, _req: Request<bo
     };
 
     // Ensure the SAE ID is an integer
-    let slave_sae_id_i64 = ensure_sae_id_integer!(slave_sae_id);
+    let slave_sae_id_i64 = ensure_sae_id_format_type!(slave_sae_id);
 
     // Retrieve the key status from the QKD manager
     match rcx.qkd_manager.get_qkd_key_status(raw_client_certificate, slave_sae_id_i64).unwrap_or_else(identity) {
@@ -67,7 +67,7 @@ pub(in crate::routes) fn route_get_status(rcx: &RequestContext, _req: Request<bo
 // ```
 pub(in crate::routes) fn route_get_key(rcx: &RequestContext, _req: Request<body::Incoming>, slave_sae_id: &str) -> Result<Response<Full<Bytes>>, Infallible> {
     // Ensure the SAE ID is an integer
-    let slave_sae_id_i64 = ensure_sae_id_integer!(slave_sae_id);
+    let slave_sae_id_i64 = ensure_sae_id_format_type!(slave_sae_id);
 
     // Check if the client certificate serial is present
     let raw_client_certificate_serial = ensure_client_certificate_serial!(rcx);
@@ -150,7 +150,7 @@ pub(in crate::routes) async fn route_get_key_with_id(rcx: &RequestContext<'_>, r
     let keys_uuids: Vec<String> = request_list_keys_ids.key_IDs.iter().map(|key_id| key_id.key_ID.clone()).collect();
 
     // Ensure the SAE ID is an integer
-    let master_sae_id_i64 = ensure_sae_id_integer!(master_sae_id);
+    let master_sae_id_i64 = ensure_sae_id_format_type!(master_sae_id);
 
     // Check if the client certificate serial is present
     let raw_client_certificate_serial = ensure_client_certificate_serial!(rcx);
@@ -181,9 +181,9 @@ pub(in crate::routes) async fn route_get_key_with_id(rcx: &RequestContext<'_>, r
 
 /// Casts the SAE ID to an integer, or returns a 400 error if fails
 #[macro_export]
-macro_rules! ensure_sae_id_integer {
+macro_rules! ensure_sae_id_format_type {
     ($sae_id:expr) => {
-        match $sae_id.parse::<i64>() {
+        match $sae_id.parse::<SaeId>() {
             Ok(sae_id) => sae_id,
             Err(_) => {
                 warn!("Invalid SAE ID, must be an integer");

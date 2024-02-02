@@ -62,6 +62,9 @@ pub type KmeId = i64;
 /// Type for QKD encryption key: basically a byte array
 pub type QkdEncKey = [u8; QKD_KEY_SIZE_BYTES];
 
+/// Type for SAE certificate serial number
+pub type SaeClientCertSerial = [u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
+
 #[cfg(test)]
 mod test {
     #[test]
