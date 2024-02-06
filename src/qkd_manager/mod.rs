@@ -4,8 +4,10 @@ mod key_handler;
 pub(crate) mod http_response_obj;
 pub(crate) mod http_request_obj;
 mod router;
+mod config_extractor;
 
 use std::{io, thread};
+use std::sync::{Arc, Mutex};
 use log::error;
 use sha1::Digest;
 use crate::qkd_manager::http_response_obj::ResponseQkdKeysList;
@@ -19,6 +21,8 @@ pub struct QkdManager {
     command_tx: crossbeam_channel::Sender<QkdManagerCommand>,
     /// Channel to receive responses from the key handler
     response_rx: crossbeam_channel::Receiver<QkdManagerResponse>,
+    /// Directory watchers for other KME keys, placed here because watch stops when dropped
+    pub(crate) dir_watcher: Arc<Mutex<Vec<notify::RecommendedWatcher>>>
 }
 
 impl QkdManager {
@@ -46,10 +50,24 @@ impl QkdManager {
             };
             key_handler.run();
         });
+
+        let dir_watcher = Arc::new(Mutex::new(Vec::new()));
+
         Self {
             command_tx,
             response_rx,
+            dir_watcher
         }
+    }
+
+    /// Create a new QKD manager handler from a configuration
+    /// # Arguments
+    /// * `config` - The configuration to use to create the QKD manager
+    /// # Returns
+    /// A new QKD manager handler if the configuration is valid, an error otherwise
+    pub fn from_config(config: &crate::config::Config) -> Result<Arc<Self>, io::Error> {
+        let qkd_manager = config_extractor::ConfigExtractor::extract_config_to_qkd_manager(config)?;
+        Ok(qkd_manager)
     }
 
     /// Add a new QKD key to the database

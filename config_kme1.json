@@ -1,0 +1,76 @@
+{
+  "this_kme": {
+    "id": 1,
+    "sqlite_db_path": ":memory:",
+    "https_listen_address": "127.0.0.1:3000",
+    "https_ca_client_cert_path": "certs/CA-zone1.crt",
+    "https_server_cert_path": "certs/kme1.crt",
+    "https_server_key_path": "certs/kme1.key"
+  },
+  "other_kmes": [
+    {
+      "id": 1,
+      "key_directory_to_watch": "raw_keys",
+      "ip_address": "127.0.0.1"
+    },
+    {
+      "id": 2,
+      "key_directory_to_watch": "raw_keys",
+      "ip_address": "127.0.0.1"
+    }
+  ],
+  "saes": [
+    {
+      "id": 1,
+      "kme_id": 1,
+      "https_client_certificate_serial": [
+        112,
+        244,
+        79,
+        86,
+        12,
+        63,
+        39,
+        212,
+        178,
+        17,
+        164,
+        120,
+        19,
+        175,
+        208,
+        60,
+        3,
+        129,
+        59,
+        142
+      ]
+    },
+    {
+      "id": 2,
+      "kme_id": 1,
+      "https_client_certificate_serial": [
+        112,
+        244,
+        79,
+        86,
+        12,
+        63,
+        39,
+        212,
+        178,
+        17,
+        164,
+        120,
+        19,
+        175,
+        208,
+        60,
+        3,
+        129,
+        59,
+        146
+      ]
+    }
+  ]
+}

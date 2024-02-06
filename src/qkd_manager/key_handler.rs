@@ -270,6 +270,9 @@ impl KeyHandler {
         })?;
         if origin_kme_id != target_kme_id {
             // send key to other KME TODO
+            // We must ensure:
+            // - other KME is authenticated
+            // - other SAE belongs to other KME
         }
 
         self.delete_pre_init_key_with_id(id).map_err(|_| {

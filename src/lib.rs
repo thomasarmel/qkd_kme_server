@@ -14,6 +14,7 @@ use std::io;
 pub mod server;
 pub mod routes;
 pub mod qkd_manager;
+pub mod config;
 
 
 /// Cast a string to an io::Error
@@ -52,6 +53,9 @@ pub const CLIENT_CERT_SERIAL_SIZE_BYTES: usize = 20;
 
 /// Location of the SQLite database file used by the KME to store keys, use ":memory:" for in-memory database
 pub const MEMORY_SQLITE_DB_PATH: &'static str = ":memory:";
+
+/// File extension for newly exchanged QKD keys
+pub const QKD_KEY_FILE_EXTENSION: &'static str = "cor";
 
 /// The type of SAE ID
 pub type SaeId = i64;
