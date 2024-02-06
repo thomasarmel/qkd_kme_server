@@ -111,7 +111,7 @@ mod test {
 
     #[test]
     fn test_context_with_cert() {
-        const CERT_FILENAME: &'static str = "certs/kme1.crt";
+        const CERT_FILENAME: &'static str = "certs/zone1/kme1.crt";
         let certs = load_cert(CERT_FILENAME).unwrap();
         assert_eq!(certs.len(), 1);
         let context = super::RequestContext::new(Some(&certs[0]), crate::qkd_manager::QkdManager::new(":memory:", 1)).unwrap();

@@ -2,21 +2,26 @@
   "this_kme": {
     "id": 1,
     "sqlite_db_path": ":memory:",
-    "https_listen_address": "127.0.0.1:3000",
-    "https_ca_client_cert_path": "certs/CA-zone1.crt",
-    "https_server_cert_path": "certs/kme1.crt",
-    "https_server_key_path": "certs/kme1.key"
+    "key_directory_to_watch": "raw_keys/kme-1-1",
+    "saes_https_interface": {
+      "listen_address": "127.0.0.1:3000",
+      "ca_client_cert_path": "certs/zone1/CA-zone1.crt",
+      "server_cert_path": "certs/zone1/kme1.crt",
+      "server_key_path": "certs/zone1/kme1.key"
+    },
+    "kmes_https_interface": {
+      "listen_address": "0.0.0.0:3001",
+      "ca_client_cert_path": "certs/inter_kmes/root-ca-kme1.crt",
+      "server_cert_path": "certs/zone1/kme1.crt",
+      "server_key_path": "certs/zone1/kme1.key"
+    }
   },
   "other_kmes": [
     {
-      "id": 1,
-      "key_directory_to_watch": "raw_keys",
-      "ip_address": "127.0.0.1"
-    },
-    {
       "id": 2,
-      "key_directory_to_watch": "raw_keys",
-      "ip_address": "127.0.0.1"
+      "key_directory_to_watch": "raw_keys/kme-1-2",
+      "inter_kme_bind_address": "127.0.0.1:3001",
+      "https_client_authentication_certificate": "certs/inter_kmes/client-kme1-to-kme2.pfx"
     }
   ],
   "saes": [

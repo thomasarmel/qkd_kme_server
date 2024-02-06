@@ -35,10 +35,10 @@ pub trait Routes {
 }
 
 /// Struct representing the routes of the server for the v1 version of the API
-pub struct QKDKMERoutesV1 {}
+pub struct EtsiSaeQkdRoutesV1 {}
 
 #[async_trait]
-impl Routes for QKDKMERoutesV1 {
+impl Routes for EtsiSaeQkdRoutesV1 {
     async fn handle_request(req: Request<body::Incoming>, client_cert: Option<&CertificateDer>, qkd_manager: QkdManager) -> Result<Response<Full<Bytes>>, Infallible> {
         let path = req.uri().path().to_owned();
 
@@ -71,7 +71,7 @@ impl Routes for QKDKMERoutesV1 {
 
 
 #[allow(dead_code)]
-impl QKDKMERoutesV1 {
+impl EtsiSaeQkdRoutesV1 {
     RESPONSE_ERROR_FUNCTION!(internal_server_error, StatusCode::INTERNAL_SERVER_ERROR, "Internal server error");
     RESPONSE_ERROR_FUNCTION!(not_found, StatusCode::NOT_FOUND, "Element not found");
     RESPONSE_ERROR_FUNCTION!(authentication_error, StatusCode::UNAUTHORIZED, "Authentication error");
@@ -111,7 +111,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_internal_server_error() {
-        let response = super::QKDKMERoutesV1::internal_server_error().unwrap();
+        let response = super::EtsiSaeQkdRoutesV1::internal_server_error().unwrap();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
         assert_eq!(body, "{\n  \"message\": \"Internal server error\"\n}");
@@ -119,7 +119,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_not_found() {
-        let response = super::QKDKMERoutesV1::not_found().unwrap();
+        let response = super::EtsiSaeQkdRoutesV1::not_found().unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
         assert_eq!(body, "{\n  \"message\": \"Element not found\"\n}");
@@ -127,7 +127,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_authentication_error() {
-        let response = super::QKDKMERoutesV1::authentication_error().unwrap();
+        let response = super::EtsiSaeQkdRoutesV1::authentication_error().unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
         assert_eq!(body, "{\n  \"message\": \"Authentication error\"\n}");
@@ -135,7 +135,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_bad_request() {
-        let response = super::QKDKMERoutesV1::bad_request().unwrap();
+        let response = super::EtsiSaeQkdRoutesV1::bad_request().unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
         assert_eq!(body, "{\n  \"message\": \"Bad request\"\n}");
@@ -143,7 +143,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_json_response_from_str() {
-        let response = super::QKDKMERoutesV1::json_response_from_str("{\"variable\": \"value\"}");
+        let response = super::EtsiSaeQkdRoutesV1::json_response_from_str("{\"variable\": \"value\"}");
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers().get("content-type").unwrap(), "application/json");
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();

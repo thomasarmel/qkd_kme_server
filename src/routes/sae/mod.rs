@@ -12,6 +12,6 @@ use crate::routes::request_context::RequestContext;
 pub(super) async fn sae_handler(rcx: &RequestContext<'_>, req: Request<body::Incoming>, uri_segments: &[&str]) -> Result<Response<Full<Bytes>>, Infallible> {
     match (uri_segments, req.method()) {
         (["info", "me"], &hyper::Method::GET) => info::route_get_info_me(rcx, req).await,
-        _ => super::QKDKMERoutesV1::not_found(),
+        _ => super::EtsiSaeQkdRoutesV1::not_found(),
     }
 }

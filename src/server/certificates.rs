@@ -60,22 +60,22 @@ pub(super) fn load_pkey(filename: &str) -> Result<Vec<PrivateKeyDer<'static>>, i
 mod test {
     #[test]
     fn test_load_cert() {
-        const CERT_FILENAME: &'static str = "certs/kme1.crt";
+        const CERT_FILENAME: &'static str = "certs/zone1/kme1.crt";
         let certs = super::load_cert(CERT_FILENAME).unwrap();
         assert_eq!(certs.len(), 1);
 
-        const CERT_FILENAME_NO_EXIST: &'static str = "certs/no_exist.crt";
+        const CERT_FILENAME_NO_EXIST: &'static str = "certs/zone1/no_exist.crt";
         let certs = super::load_cert(CERT_FILENAME_NO_EXIST);
         assert!(certs.is_err());
     }
 
     #[test]
     fn test_load_pkey() {
-        const PKEY_FILENAME: &'static str = "certs/kme1.key";
+        const PKEY_FILENAME: &'static str = "certs/zone1/kme1.key";
         let keys = super::load_pkey(PKEY_FILENAME).unwrap();
         assert_eq!(keys.len(), 1);
 
-        const PKEY_FILENAME_NO_EXIST: &'static str = "certs/no_exist.key";
+        const PKEY_FILENAME_NO_EXIST: &'static str = "certs/zone1/no_exist.key";
         let keys = super::load_pkey(PKEY_FILENAME_NO_EXIST);
         assert!(keys.is_err());
     }

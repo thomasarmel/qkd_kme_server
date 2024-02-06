@@ -40,14 +40,40 @@ pub struct ThisKmeConfig {
     /// Path to SQLite database file, used to store keys, certificates and other data
     /// You can use `:memory:` to use in-memory database
     pub(crate) sqlite_db_path: String,
-    /// Address to listen for HTTPS connections
-    pub https_listen_address: String,
+    /// Directory for keys used in the same KME zone
+    /// # Note you could use classical encryption in this case, it's just for compatibility purpose
+    pub(crate) key_directory_to_watch: String,
+    /// Config for internal HTTPS interface for SAEs
+    /// # Note you should listen only on secured internal network
+    pub saes_https_interface: SAEsHttpsInterfaceConfig,
+    /// Config for external HTTPS interface for other KMEs
+    pub kmes_https_interface: KMEsHttpsInterfaceConfig
+}
+
+/// Config for internal HTTPS interface for SAEs (likely secured local network)
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SAEsHttpsInterfaceConfig {
+    /// Address to listen for HTTPS connections, it should be a secured internal network
+    pub listen_address: String,
     /// Server certificate authority certificate path, used to authenticate client SAEs
-    pub https_ca_client_cert_path: String,
+    pub ca_client_cert_path: String,
     /// Server HTTPS certificate path
-    pub https_server_cert_path: String,
+    pub server_cert_path: String,
     /// Server HTTPS private key path
-    pub https_server_key_path: String
+    pub server_key_path: String
+}
+
+/// Config for external HTTPS interface for other KME network (likely global network
+#[derive(Serialize, Deserialize, Debug)]
+pub struct KMEsHttpsInterfaceConfig {
+    /// Address to listen for HTTPS connections, it could be the public IP address
+    pub listen_address: String,
+    /// Server certificate authority certificate path, used to authenticate client SAEs
+    pub ca_client_cert_path: String,
+    /// Server HTTPS certificate path
+    pub server_cert_path: String,
+    /// Server HTTPS private key path
+    pub server_key_path: String
 }
 
 /// Configs for other KMEs, including their IDs and paths to directories to watch for new keys
@@ -58,7 +84,9 @@ pub struct OtherKmeConfig {
     /// Path to directory to read and watch for new keys, files must have [crate::QKD_KEY_FILE_EXTENSION](crate::QKD_KEY_FILE_EXTENSION) extension
     pub(crate) key_directory_to_watch: String,
     /// IP address of the other KME, used to send keys to it using "classical channel"
-    pub(crate) ip_address: String,
+    pub(crate) inter_kme_bind_address: String,
+    /// Client certificate for inter KME HTTPS authentication
+    pub(crate) https_client_authentication_certificate: String
 }
 
 /// Config for specific SAE: its ID, KME ID and optional client certificate serial

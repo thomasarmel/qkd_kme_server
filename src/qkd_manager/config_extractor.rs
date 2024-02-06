@@ -5,7 +5,7 @@ use std::sync::Arc;
 use notify::event::{AccessKind, AccessMode};
 use notify::{EventKind, RecursiveMode, Watcher};
 use crate::config::Config;
-use crate::io_err;
+use crate::{io_err, KmeId};
 use crate::qkd_manager::{PreInitQkdKeyWrapper, QkdManager};
 
 pub(super) struct ConfigExtractor {}
@@ -22,33 +22,39 @@ impl ConfigExtractor {
         for other_kme_config in &config.other_kme_configs {
             let kme_id = other_kme_config.id;
             let kme_keys_dir = other_kme_config.key_directory_to_watch.as_str();
-            let mut dir_watchers = qkd_manager.dir_watcher.lock().unwrap();
-            let qkd_manager = Arc::clone(&qkd_manager);
-            Self::extract_all_keys_from_dir(Arc::clone(&qkd_manager), kme_keys_dir, other_kme_config.id);
+            Self::extract_and_watch_raw_keys_dir(Arc::clone(&qkd_manager), kme_id, kme_keys_dir)?;
+        }
+        Self::extract_and_watch_raw_keys_dir(Arc::clone(&qkd_manager), config.this_kme_config.id, config.this_kme_config.key_directory_to_watch.as_str())?;
+        Ok(())
+    }
 
-            dir_watchers.push(match notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
-                match res {
-                    Ok(event) => {
-                        if let EventKind::Access(AccessKind::Close(AccessMode::Write)) = event.kind {
-                            if Self::check_file_extension_qkd_keys(event.paths[0].to_str().unwrap()) {
-                                Self::extract_all_keys_from_file(Arc::clone(&qkd_manager), &event.paths[0].to_str().unwrap(), kme_id);
-                            }
+    fn extract_and_watch_raw_keys_dir(qkd_manager: Arc<QkdManager>, kme_id: KmeId, kme_keys_dir: &str) -> Result<(), io::Error> {
+        let mut dir_watchers = qkd_manager.dir_watcher.lock().unwrap();
+        let qkd_manager = Arc::clone(&qkd_manager);
+        Self::extract_all_keys_from_dir(Arc::clone(&qkd_manager), kme_keys_dir, kme_id);
+
+        dir_watchers.push(match notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
+            match res {
+                Ok(event) => {
+                    if let EventKind::Access(AccessKind::Close(AccessMode::Write)) = event.kind {
+                        if Self::check_file_extension_qkd_keys(event.paths[0].to_str().unwrap()) {
+                            Self::extract_all_keys_from_file(Arc::clone(&qkd_manager), &event.paths[0].to_str().unwrap(), kme_id);
                         }
                     }
-                    Err(e) => {
-                        println!("Watch error: {:?}", e);
-                        return;
-                    }
                 }
-            }) {
-                Ok(watcher) => watcher,
                 Err(e) => {
-                    return Err(io_err(&format!("Error creating watcher: {:?}", e)));
+                    println!("Watch error: {:?}", e);
+                    return;
                 }
-            });
-            if dir_watchers.iter_mut().last().unwrap().watch(Path::new(kme_keys_dir), RecursiveMode::NonRecursive).is_err() {
-                return Err(io_err(&format!("Error watching directory: {:?}", kme_keys_dir)));
             }
+        }) {
+            Ok(watcher) => watcher,
+            Err(e) => {
+                return Err(io_err(&format!("Error creating watcher: {:?}", e)));
+            }
+        });
+        if dir_watchers.iter_mut().last().unwrap().watch(Path::new(kme_keys_dir), RecursiveMode::NonRecursive).is_err() {
+            return Err(io_err(&format!("Error watching directory: {:?}", kme_keys_dir)));
         }
         Ok(())
     }

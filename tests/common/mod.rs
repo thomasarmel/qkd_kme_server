@@ -3,16 +3,16 @@
 use std::fs::File;
 use std::io::Read;
 use qkd_kme_server::qkd_manager::{PreInitQkdKeyWrapper, QkdManager};
-use qkd_kme_server::routes::QKDKMERoutesV1;
+use qkd_kme_server::routes::EtsiSaeQkdRoutesV1;
 
 pub const HOST_PORT: &'static str = "localhost:3000";
 
 pub fn setup() {
     let server = qkd_kme_server::server::Server {
         listen_addr: "127.0.0.1:3000".to_string(),
-        ca_client_cert_path: "certs/CA-zone1.crt".to_string(),
-        server_cert_path: "certs/kme1.crt".to_string(),
-        server_key_path: "certs/kme1.key".to_string(),
+        ca_client_cert_path: "certs/zone1/CA-zone1.crt".to_string(),
+        server_cert_path: "certs/zone1/kme1.crt".to_string(),
+        server_key_path: "certs/zone1/kme1.key".to_string(),
     };
 
     let qkd_manager = QkdManager::new(":memory:", 1);
@@ -33,12 +33,12 @@ pub fn setup() {
     ).unwrap();
     qkd_manager.add_pre_init_qkd_key(qkd_key_2).unwrap();
 
-    tokio::spawn(async move {server.run::<QKDKMERoutesV1>(&qkd_manager).await.unwrap();});
+    tokio::spawn(async move {server.run::<EtsiSaeQkdRoutesV1>(&qkd_manager).await.unwrap();});
 }
 
 pub fn setup_cert_auth_reqwest_client() -> reqwest::Client {
     let mut buf = Vec::new();
-    File::open("certs/sae1.pfx").unwrap().read_to_end(&mut buf).unwrap();
+    File::open("certs/zone1/sae1.pfx").unwrap().read_to_end(&mut buf).unwrap();
     let client_cert_id = reqwest::Identity::from_pkcs12_der(&buf, "").unwrap();
     reqwest::Client::builder()
         .identity(client_cert_id)
@@ -49,7 +49,7 @@ pub fn setup_cert_auth_reqwest_client() -> reqwest::Client {
 pub fn setup_cert_auth_reqwest_client_unregistered_sae() -> reqwest::Client {
     let mut buf = Vec::new();
     // SAE2 is not registered in SAEs database
-    File::open("certs/sae2.pfx").unwrap().read_to_end(&mut buf).unwrap();
+    File::open("certs/zone1/sae2.pfx").unwrap().read_to_end(&mut buf).unwrap();
     let client_cert_id = reqwest::Identity::from_pkcs12_der(&buf, "").unwrap();
     reqwest::Client::builder()
         .identity(client_cert_id)
