@@ -1,6 +1,8 @@
 use log::error;
+use tokio::select;
 use qkd_kme_server::qkd_manager::QkdManager;
 use qkd_kme_server::routes::EtsiSaeQkdRoutesV1;
+use qkd_kme_server::routes::inter_kmes_routes::InterKMEsRoutes;
 
 #[tokio::main]
 async fn main() {
@@ -37,8 +39,12 @@ async fn main() {
     println!("{:?}", qkd_manager.is_err());
     let qkd_manager = qkd_manager.unwrap();
 
-    if sae_https_server.run::<EtsiSaeQkdRoutesV1>(&qkd_manager).await.is_err() {
-        error!("Error running SAEs HTTPS server");
-        return;
+    select! {
+        x = inter_kme_https_server.run::<InterKMEsRoutes>(&qkd_manager) => {
+            error!("Error running inter-KMEs HTTPS server: {:?}", x);
+        },
+        x = sae_https_server.run::<EtsiSaeQkdRoutesV1>(&qkd_manager) => {
+            error!("Error running SAEs HTTPS server: {:?}", x);
+        }
     }
 }

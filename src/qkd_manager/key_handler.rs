@@ -5,7 +5,7 @@ use std::io;
 use uuid::Bytes;
 use x509_parser::nom::AsBytes;
 use crate::{io_err, KmeId, qkd_manager, SaeClientCertSerial, SaeId};
-use crate::qkd_manager::{KMEInfo, PreInitQkdKeyWrapper, QkdManagerCommand, QkdManagerResponse, SAEInfo};
+use crate::qkd_manager::{http_request_obj, KMEInfo, PreInitQkdKeyWrapper, QkdManagerCommand, QkdManagerResponse, router, SAEInfo};
 use base64::{engine::general_purpose, Engine as _};
 use log::{error, info, warn};
 use crate::qkd_manager::http_response_obj::{ResponseQkdKey, ResponseQkdKeysList};
@@ -21,6 +21,8 @@ pub(super) struct KeyHandler {
     sqlite_db: sqlite::Connection,
     /// The ID of this KME
     this_kme_id: KmeId,
+    /// Router on classical network, used to connect to other KMEs over unsecure classical network
+    qkd_router: router::QkdRouter,
 }
 
 impl KeyHandler {
@@ -45,6 +47,7 @@ impl KeyHandler {
                 io::Error::new(io::ErrorKind::NotConnected, format!("Error opening sqlite database: {:?}", e))
             })?,
             this_kme_id,
+            qkd_router: router::QkdRouter::new(),
         };
         // Create the tables if they do not exist
         key_handler.sqlite_db.execute(DATABASE_INIT_REQ).map_err(|e| {
@@ -120,6 +123,24 @@ impl KeyHandler {
                                 error!("Error QKD manager sending response");
                             }
                         },
+                        QkdManagerCommand::ActivateKeyFromRemote(origin_sae_id, target_sae_id, target_key_uuid) => {
+                            let key_activate_response = self.activate_key_uuid_sae(origin_sae_id, target_sae_id, target_key_uuid).unwrap_or_else(identity);
+                            if self.response_tx.send(key_activate_response).is_err() {
+                                error!("Error QKD manager sending response");
+                            }
+                        }
+                        QkdManagerCommand::AddKmeClassicalNetInfo(kme_id, kme_addr_or_domain, conn_client_cert, conn_cert_password) => {
+                            let add_kme_response = match self.qkd_router.add_kme_to_ip_or_domain_association(kme_id, &kme_addr_or_domain, &conn_client_cert, &conn_cert_password) {
+                                Ok(_) => QkdManagerResponse::Ok,
+                                Err(e) => {
+                                    error!("Error adding KME classical network info: {:?}", e);
+                                    QkdManagerResponse::Ko
+                                },
+                            };
+                            if self.response_tx.send(add_kme_response).is_err() {
+                                error!("Error QKD manager sending response");
+                            }
+                        }
                     }
                 }
                 Err(e) => {
@@ -269,10 +290,14 @@ impl KeyHandler {
             QkdManagerResponse::Ko
         })?;
         if origin_kme_id != target_kme_id {
-            // send key to other KME TODO
+            // send key to other KME
             // We must ensure:
-            // - other KME is authenticated
-            // - other SAE belongs to other KME
+            // - other KME is authenticated (client certificate and operating system trust store)
+            // - other SAE belongs to other KME (statically managed for now)
+            self.activate_key_on_other_kme(origin_sae_id, target_kme_id, target_sae_id, &key_uuid).map_err(|_| {
+                error!("Error activating key on other KME");
+                QkdManagerResponse::Ko
+            })?;
         }
 
         self.delete_pre_init_key_with_id(id).map_err(|_| {
@@ -281,14 +306,96 @@ impl KeyHandler {
         })?;
 
         info!("Saving key {} in init keys", key_uuid);
-        const INSERT_INIT_KEY_PREPARED_STATEMENT: &'static str = "INSERT INTO keys (key_uuid, key, origin_sae_id, target_sae_id) VALUES (?, ?, ?, ?);";
 
-        let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, INSERT_INIT_KEY_PREPARED_STATEMENT);
+        self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id).map_err(|_| {
+            error!("Error inserting activated key");
+            QkdManagerResponse::Ko
+        })?;
+
+        // Encode the key in base64
+        let response_qkd_key = ResponseQkdKey {
+            key_ID: key_uuid,
+            key: general_purpose::STANDARD.encode(&key)
+        };
+
+        // Return a list of key objects
+        Ok(QkdManagerResponse::Keys(ResponseQkdKeysList {
+            keys: vec![response_qkd_key],
+        }))
+    }
+
+    fn activate_key_uuid_sae(&self, origin_sae_id: SaeId, target_sae_id: SaeId, key_uuid: String) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        const GET_PRE_INIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, key, other_kme_id FROM uninit_keys WHERE key_uuid = ? LIMIT 1;";
+
+        let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, GET_PRE_INIT_KEY_PREPARED_STATEMENT);
         stmt.bind((1, key_uuid.as_str())).map_err(|_| {
             error!("Error binding key UUID");
             QkdManagerResponse::Ko
         })?;
-        stmt.bind((2, key.as_slice())).map_err(|_| {
+        let sql_execution_state = stmt.next().map_err(|_| {
+            error!("Error executing SQL statement");
+            QkdManagerResponse::Ko
+        })?;
+
+        if sql_execution_state != sqlite::State::Row {
+            return Err(QkdManagerResponse::NotFound);
+        }
+
+        let key_id = stmt.read::<i64, usize>(0).map_err(|_| {
+            error!("Error reading SQL statement result");
+            QkdManagerResponse::Ko
+        })?;
+        let key: Vec<u8> = stmt.read::<Vec<u8>, usize>(1).map_err(|_| {
+            error!("Error reading SQL statement result");
+            QkdManagerResponse::Ko
+        })?;
+        let _other_kme_id = stmt.read::<KmeId, usize>(2).map_err(|_| {
+            error!("Error reading SQL statement result");
+            QkdManagerResponse::Ko
+        })?;
+
+        self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id).map_err(|_| {
+            error!("Error inserting activated key");
+            QkdManagerResponse::Ko
+        })?;
+        self.delete_pre_init_key_with_id(key_id).map_err(|_| {
+            error!("Error deleting pre-init key {}", key_id);
+            QkdManagerResponse::Ko
+        })?;
+
+        info!("Key {} activated between saes {} and {}", key_uuid, origin_sae_id, target_sae_id);
+        Ok(QkdManagerResponse::Ok)
+    }
+
+    fn activate_key_on_other_kme(&self, caller_master_sae_id: SaeId, other_kme_id: KmeId, other_sae_id: SaeId, key_uuid: &str) -> Result<(), io::Error> {
+        let req_body = http_request_obj::ActivateKeyRemoteKME {
+            key_ID: key_uuid.to_string(),
+            origin_SAE_ID: caller_master_sae_id,
+            remote_SAE_ID: other_sae_id,
+        };
+        let kme_classical_info = self.qkd_router.get_classical_connection_info_from_kme_id(other_kme_id).ok_or(io_err("KME ID not found"))?;
+        let kme_client = reqwest::blocking::Client::builder()
+            .identity(kme_classical_info.tls_client_cert_identity.clone())
+            .build().map_err(|_| io_err("Error building reqwest client"))?;
+        let response = kme_client.post(&format!("https://{}/keys/activate", kme_classical_info.ip_or_domain))
+            .json(&req_body)
+            .send().map_err(|_| io_err("Error sending HTTP request"))?;
+
+        if response.status() != reqwest::StatusCode::OK {
+            return Err(io_err("Error activating key on other KME"));
+        }
+        Ok(())
+    }
+
+    fn insert_activated_key(&self, key_uuid: &str, key: &[u8], origin_sae_id: SaeId, target_sae_id: SaeId)-> Result<QkdManagerResponse, QkdManagerResponse> {
+        const INSERT_INIT_KEY_PREPARED_STATEMENT: &'static str = "INSERT INTO keys (key_uuid, key, origin_sae_id, target_sae_id) VALUES (?, ?, ?, ?);";
+
+        let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, INSERT_INIT_KEY_PREPARED_STATEMENT);
+        stmt.bind((1, key_uuid)).map_err(|_| {
+            error!("Error binding key UUID");
+            QkdManagerResponse::Ko
+        })?;
+        stmt.bind((2, key)).map_err(|_| {
             error!("Error binding key");
             QkdManagerResponse::Ko
         })?;
@@ -304,17 +411,7 @@ impl KeyHandler {
             error!("Error executing SQL statement");
             QkdManagerResponse::Ko
         })?;
-
-        // Encode the key in base64
-        let response_qkd_key = ResponseQkdKey {
-            key_ID: key_uuid,
-            key: general_purpose::STANDARD.encode(&key)
-        };
-
-        // Return a list of key objects
-        Ok(QkdManagerResponse::Keys(ResponseQkdKeysList {
-            keys: vec![response_qkd_key],
-        }))
+        Ok(QkdManagerResponse::Ok)
     }
 
     /// Delete a pre-init key from the pre-init keys database

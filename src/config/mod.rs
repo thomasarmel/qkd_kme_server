@@ -86,7 +86,9 @@ pub struct OtherKmeConfig {
     /// IP address of the other KME, used to send keys to it using "classical channel"
     pub(crate) inter_kme_bind_address: String,
     /// Client certificate for inter KME HTTPS authentication
-    pub(crate) https_client_authentication_certificate: String
+    pub(crate) https_client_authentication_certificate: String,
+    /// Password for the client certificate
+    pub(crate) https_client_authentication_certificate_password: String
 }
 
 /// Config for specific SAE: its ID, KME ID and optional client certificate serial

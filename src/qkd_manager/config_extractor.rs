@@ -15,6 +15,7 @@ impl ConfigExtractor {
         let qkd_manager = Arc::new(QkdManager::new(&config.this_kme_config.sqlite_db_path, config.this_kme_config.id));
         Self::extract_all_saes(Arc::clone(&qkd_manager), config)?;
         Self::extract_other_kmes_and_keys(Arc::clone(&qkd_manager), config)?;
+        Self::add_classical_net_routing_info_kmes(Arc::clone(&qkd_manager), config)?;
         Ok(qkd_manager)
     }
 
@@ -98,5 +99,18 @@ impl ConfigExtractor {
     fn check_file_extension_qkd_keys(file_path: &str) -> bool {
         let file_ext = Path::new(file_path).extension();
         file_ext.is_some() && file_ext.unwrap() == crate::QKD_KEY_FILE_EXTENSION
+    }
+
+    fn add_classical_net_routing_info_kmes(qkd_manager: Arc<QkdManager>, config: &Config) -> Result<(), io::Error> {
+        for other_kme_config in &config.other_kme_configs {
+            qkd_manager.add_kme_classical_net_info(other_kme_config.id,
+                                                   other_kme_config.inter_kme_bind_address.clone(),
+                                                   other_kme_config.https_client_authentication_certificate.clone(),
+                                                   other_kme_config.https_client_authentication_certificate_password.clone())
+                .map_err(|e|
+                    io_err(&format!("Cannot add KME classical network info: {:?}", e))
+                )?;
+        }
+        Ok(())
     }
 }

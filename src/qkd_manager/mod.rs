@@ -199,6 +199,47 @@ impl QkdManager {
             _ => None,
         }
     }
+
+    /// From a remote KME, activate a key after master SAE requested it, to be requested by the slave SAE
+    /// # Arguments
+    /// * `origin_sae_id` - The ID of the origin (master) SAE, belonging to another KME
+    /// * `target_sae_id` - The ID of the target (slave) SAE, to which master SAE wants to communicate, belonging to this KME
+    /// * `key_uuid` - The UUID of the key to activate
+    /// # Returns
+    /// Ok if the key was activated successfully, an error otherwise
+    pub fn activate_key_from_remote(&self, origin_sae_id: SaeId, target_sae_id: SaeId, key_uuid: String) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        self.command_tx.send(QkdManagerCommand::ActivateKeyFromRemote(origin_sae_id, target_sae_id, key_uuid)).map_err(|_| {
+            TransmissionError
+        })?;
+        match self.response_rx.recv().map_err(|_| {
+            TransmissionError
+        })? {
+            QkdManagerResponse::Ok => Ok(QkdManagerResponse::Ok), // Ok is the QkdManagerResponse expected here
+            qkd_response_error => Err(qkd_response_error),
+        }
+    }
+
+    /// Add classical network information to a KME, used to activate keys on it for slave KMEs using "classical channel"
+    /// # Arguments
+    /// * `kme_id` - The ID of the KME
+    /// * `kme_addr` - The IP address or domain of the KME on the classical network
+    /// * `client_auth_certificate_path` - The path to the client authentication certificate of the KME
+    /// * `client_auth_certificate_password` - The password of the client authentication certificate of the KME
+    /// # Returns
+    /// Ok if the KME classical network information was added successfully, an error otherwise
+    /// # Notes
+    /// You should also add target KME's CA certificate to the trust store of the source KME operating system
+    pub fn add_kme_classical_net_info(&self, kme_id: KmeId, kme_addr: String, client_auth_certificate_path: String, client_auth_certificate_password: String) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        self.command_tx.send(QkdManagerCommand::AddKmeClassicalNetInfo(kme_id, kme_addr, client_auth_certificate_path, client_auth_certificate_password)).map_err(|_| {
+            TransmissionError
+        })?;
+        match self.response_rx.recv().map_err(|_| {
+            TransmissionError
+        })? {
+            QkdManagerResponse::Ok => Ok(QkdManagerResponse::Ok), // Ok is the QkdManagerResponse expected here
+            qkd_response_error => Err(qkd_response_error),
+        }
+    }
 }
 
 /// A Pre-init QKD key, with its origin and target KME IDs
@@ -276,6 +317,8 @@ enum QkdManagerCommand {
     AddPreInitKey(PreInitQkdKeyWrapper),
     /// Get a QKD key from the database (shall be called by the master SAE)
     GetKeys(SaeClientCertSerial, SaeId), // origin certificate + target id
+    /// Activate a key from a remote KME, after master SAE requested it
+    ActivateKeyFromRemote(SaeId, SaeId, String), // Origin SAE ID + Target SAE ID + Key UUID
     /// Get a list of QKD keys from the database (shall be called by the slave SAE)
     GetKeysWithIds(SaeClientCertSerial, SaeId, Vec<String>), // origin certificate + target id
     /// Get the status of a key exchange between two SAEs (shall be called by the master SAE)
@@ -286,6 +329,8 @@ enum QkdManagerCommand {
     GetSaeInfoFromCertificate(SaeClientCertSerial), // caller's certificate
     /// Returns the KME ID from belonging SAE ID
     GetKmeIdFromSaeId(SaeId), // SAE id
+    /// Add classical network information to a KME, used to activate keys on it for slave KMEs using "classical channel"
+    AddKmeClassicalNetInfo(KmeId, String, String, String), // KME id + KME address + client auth certificate path + client auth certificate password
 }
 
 /// All possible responses from the QKD manager
