@@ -97,7 +97,7 @@ impl QkdManager {
     /// # Returns
     /// The requested QKD key if the key was found and the caller is authorized to retrieve it, an error otherwise
     pub async fn get_qkd_key(&self, target_sae_id: SaeId, auth_client_cert_serial: &SaeClientCertSerial) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        self.command_tx.send(QkdManagerCommand::GetKeys(*auth_client_cert_serial, target_sae_id)).map_err(|_| {
+        self.command_tx.send(QkdManagerCommand::GetKeys(auth_client_cert_serial.clone(), target_sae_id)).map_err(|_| {
             TransmissionError
         })?;
         let qkd_manager_response_receive_channel = self.response_rx.clone();
@@ -122,7 +122,7 @@ impl QkdManager {
     /// # Returns
     /// The requested QKD keys if the keys were found and the caller is authorized to retrieve them, an error otherwise
     pub fn get_qkd_keys_with_ids(&self, source_sae_id: SaeId, auth_client_cert_serial: &SaeClientCertSerial, keys_uuids: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        self.command_tx.send(QkdManagerCommand::GetKeysWithIds(*auth_client_cert_serial, source_sae_id, keys_uuids)).map_err(|_| {
+        self.command_tx.send(QkdManagerCommand::GetKeysWithIds(auth_client_cert_serial.clone(), source_sae_id, keys_uuids)).map_err(|_| {
             TransmissionError
         })?;
         match self.response_rx.recv().map_err(|_| {
@@ -144,7 +144,7 @@ impl QkdManager {
     /// # Notes
     /// It will fail if the SAE ID is already in the database
     pub fn add_sae(&self, sae_id: SaeId, kme_id: KmeId, sae_certificate_serial: &Option<SaeClientCertSerial>) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        self.command_tx.send(QkdManagerCommand::AddSae(sae_id, kme_id, *sae_certificate_serial)).map_err(|_| {
+        self.command_tx.send(QkdManagerCommand::AddSae(sae_id, kme_id, sae_certificate_serial.clone())).map_err(|_| {
             TransmissionError
         })?;
         match self.response_rx.recv().map_err(|_| {
@@ -162,7 +162,7 @@ impl QkdManager {
     /// # Returns
     /// The status of the key exchange if the key exchange was found and the caller is authorized to retrieve it, an error otherwise
     pub fn get_qkd_key_status(&self, origin_sae_certificate_serial: &SaeClientCertSerial, target_sae_id: SaeId) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        self.command_tx.send(QkdManagerCommand::GetStatus(*origin_sae_certificate_serial, target_sae_id)).map_err(|_| {
+        self.command_tx.send(QkdManagerCommand::GetStatus(origin_sae_certificate_serial.clone(), target_sae_id)).map_err(|_| {
             TransmissionError
         })?;
         match self.response_rx.recv().map_err(|_| {
@@ -179,7 +179,7 @@ impl QkdManager {
     /// # Returns
     /// The SAE information (like SAE ID) if the SAE was found, an error otherwise
     pub fn get_sae_info_from_client_auth_certificate(&self, client_certificate_serial: &SaeClientCertSerial) -> Result<SAEInfo, QkdManagerResponse> {
-        self.command_tx.send(QkdManagerCommand::GetSaeInfoFromCertificate(*client_certificate_serial)).map_err(|_| {
+        self.command_tx.send(QkdManagerCommand::GetSaeInfoFromCertificate(client_certificate_serial.clone())).map_err(|_| {
             TransmissionError
         })?;
         match self.response_rx.recv().map_err(|_| {
@@ -383,7 +383,8 @@ pub enum QkdManagerResponse {
 #[cfg(test)]
 mod test {
     use serial_test::serial;
-    use crate::CLIENT_CERT_SERIAL_SIZE_BYTES;
+
+    const CLIENT_CERT_SERIAL_SIZE_BYTES: usize = 20;
 
     #[test]
     fn test_add_qkd_key() {
@@ -399,17 +400,17 @@ mod test {
     fn test_add_sae() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
         let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
-        let response = qkd_manager.add_sae(1,  1, &Some([0; CLIENT_CERT_SERIAL_SIZE_BYTES]));
+        let response = qkd_manager.add_sae(1,  1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]));
         assert!(response.is_ok());
         assert_eq!(response.unwrap(), super::QkdManagerResponse::Ok);
 
         // Duplicate SAE ID
-        let response = qkd_manager.add_sae(1, 1, &Some([0; CLIENT_CERT_SERIAL_SIZE_BYTES]));
+        let response = qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]));
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::Ko);
 
         // Add SAE with key if it doesn't belong to KME1
-        let response = qkd_manager.add_sae(2, 2, &Some([0; CLIENT_CERT_SERIAL_SIZE_BYTES]));
+        let response = qkd_manager.add_sae(2, 2, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]));
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::InconsistentSaeData);
 
@@ -429,20 +430,20 @@ mod test {
     async fn test_get_qkd_key() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
         let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
-        qkd_manager.add_sae(1, 1, &Some([0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         qkd_manager.add_sae(2, 2, &None).unwrap(); // No certificate as this SAE doesn't belong to KME1
         let key = super::PreInitQkdKeyWrapper::new(1, &[0; crate::QKD_KEY_SIZE_BYTES]).unwrap();
         qkd_manager.add_pre_init_qkd_key(key).unwrap();
-        let response = qkd_manager.get_qkd_key(2, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
+        let response = qkd_manager.get_qkd_key(2, &vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::NotFound);
 
-        let response = qkd_manager.get_qkd_key(1, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
+        let response = qkd_manager.get_qkd_key(1, &vec![1; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::AuthenticationError);
 
 
-        let response = qkd_manager.get_qkd_key(1, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
+        let response = qkd_manager.get_qkd_key(1, &vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
         assert!(response.is_ok());
     }
 
@@ -451,29 +452,29 @@ mod test {
     async fn test_get_qkd_keys_with_ids() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
         let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
-        qkd_manager.add_sae(1, 1, &Some([0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
-        qkd_manager.add_sae(2, 1, &Some([1; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        qkd_manager.add_sae(2, 1, &Some(vec![1; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let key = super::PreInitQkdKeyWrapper::new(1,&[0; crate::QKD_KEY_SIZE_BYTES]).unwrap();
         let key_uuid = key.get_uuid();
         let key_uuid_str = uuid::Uuid::from_bytes(key_uuid).to_string();
         qkd_manager.add_pre_init_qkd_key(key).unwrap();
-        let response = qkd_manager.get_qkd_keys_with_ids(2, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
+        let response = qkd_manager.get_qkd_keys_with_ids(2, &vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::NotFound);
 
-        let response = qkd_manager.get_qkd_keys_with_ids(1, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
+        let response = qkd_manager.get_qkd_keys_with_ids(1, &vec![1; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::NotFound);
 
-        let response = qkd_manager.get_qkd_key(1, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
+        let response = qkd_manager.get_qkd_key(1, &vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
         assert!(response.is_ok());
-        let response = qkd_manager.get_qkd_keys_with_ids(1, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
+        let response = qkd_manager.get_qkd_keys_with_ids(1, &vec![1; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::NotFound);
 
-        let response = qkd_manager.get_qkd_key(2, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
+        let response = qkd_manager.get_qkd_key(2, &vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
         assert!(response.is_err());
-        let response = qkd_manager.get_qkd_keys_with_ids(1, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
+        let response = qkd_manager.get_qkd_keys_with_ids(1, &vec![1; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::NotFound);
 
@@ -483,9 +484,9 @@ mod test {
         let key_uuid_str = uuid::Uuid::from_bytes(key_uuid).to_string();
         qkd_manager.add_pre_init_qkd_key(key).unwrap();
 
-        let response = qkd_manager.get_qkd_key(2, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
+        let response = qkd_manager.get_qkd_key(2, &vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
         assert!(response.is_ok());
-        let response = qkd_manager.get_qkd_keys_with_ids(1, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
+        let response = qkd_manager.get_qkd_keys_with_ids(1, &vec![1; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
         assert!(response.is_ok());
         assert!(matches!(response.unwrap(), super::QkdManagerResponse::Keys(_)));
     }
@@ -494,11 +495,11 @@ mod test {
     fn test_get_qkd_key_status() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
         let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
-        qkd_manager.add_sae(1, 1, &Some([0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
-        qkd_manager.add_sae(2, 1, &Some([1; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        qkd_manager.add_sae(2, 1, &Some(vec![1; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let key = super::PreInitQkdKeyWrapper::new(1, &[0; crate::QKD_KEY_SIZE_BYTES]).unwrap();
         qkd_manager.add_pre_init_qkd_key(key).unwrap();
-        let response = qkd_manager.get_qkd_key_status(&[1; CLIENT_CERT_SERIAL_SIZE_BYTES], 2);
+        let response = qkd_manager.get_qkd_key_status(&vec![1; CLIENT_CERT_SERIAL_SIZE_BYTES], 2);
         assert!(response.is_ok());
         assert!(matches!(response.unwrap(), super::QkdManagerResponse::Status(_)));
     }
@@ -515,15 +516,15 @@ mod test {
     fn test_get_sae_info_from_client_auth_certificate() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
         let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
-        qkd_manager.add_sae(1, 1, &Some([0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
-        let response = qkd_manager.get_sae_info_from_client_auth_certificate(&[0; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        let response = qkd_manager.get_sae_info_from_client_auth_certificate(&vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]);
         assert!(response.is_ok());
         let response = response.unwrap();
         assert_eq!(response.sae_id, 1);
         assert_eq!(response.kme_id, 1);
 
         // SAE certificate not present in database
-        let response = qkd_manager.get_sae_info_from_client_auth_certificate(&[1; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        let response = qkd_manager.get_sae_info_from_client_auth_certificate(&vec![1; CLIENT_CERT_SERIAL_SIZE_BYTES]);
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::NotFound);
     }
@@ -532,7 +533,7 @@ mod test {
     fn test_get_kme_id_from_sae_id() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
         let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
-        qkd_manager.add_sae(1, 1, &Some([0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let response = qkd_manager.get_kme_id_from_sae_id(1);
         assert!(response.is_some());
         let response = response.unwrap();

@@ -78,9 +78,9 @@ impl<'a> RequestContext<'a> {
     /// The client certificate serial number as a raw byte array if the client has a certificate
     /// # Errors
     /// io::Error if the client does not have a certificate
-    pub(crate) fn get_client_certificate_serial_as_raw(&self) -> Result<&SaeClientCertSerial, io::Error> {
+    pub(crate) fn get_client_certificate_serial_as_raw(&self) -> Result<SaeClientCertSerial, io::Error> {
         let cert = self.certificate_or_error()?;
-        Ok(<&[u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]>::try_from(cert.raw_serial()).map_err(|_| {
+        Ok(Vec::from(cert.raw_serial()).try_into().map_err(|_| {
             io_err("Invalid client certificate serial")
         })?)
     }

@@ -48,9 +48,6 @@ pub const MAX_QKD_KEY_SAE_IDS: usize = 0; // We don't support key multicast yet
 /// How many keys can be stored in the KME for a given SAE
 pub const MAX_QKD_KEYS_PER_SAE: usize = 10;
 
-/// The size of the client certificate serial number in bytes, constant
-pub const CLIENT_CERT_SERIAL_SIZE_BYTES: usize = 20; // TODO change + no proxy + shannon entropy
-
 /// Location of the SQLite database file used by the KME to store keys, use ":memory:" for in-memory database
 pub const MEMORY_SQLITE_DB_PATH: &'static str = ":memory:";
 
@@ -75,7 +72,7 @@ pub type KmeId = i64;
 pub type QkdEncKey = [u8; QKD_KEY_SIZE_BYTES];
 
 /// Type for SAE certificate serial number
-pub type SaeClientCertSerial = [u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
+pub type SaeClientCertSerial = Vec<u8>;
 
 #[cfg(test)]
 mod test {
@@ -86,3 +83,5 @@ mod test {
         assert_eq!(err.to_string(), "test");
     }
 }
+
+// TODO shannon entropy

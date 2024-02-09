@@ -182,7 +182,7 @@ impl KeyHandler {
             QkdManagerResponse::Ko
         })?;
         if sae_certificate_serial.is_some() {
-            stmt.bind((3, sae_certificate_serial.unwrap().as_bytes())).map_err(|_| {
+            stmt.bind((3, sae_certificate_serial.as_ref().unwrap().as_bytes())).map_err(|_| {
                 QkdManagerResponse::Ko
             })?;
         }
@@ -628,7 +628,7 @@ impl KeyHandler {
         Ok(QkdManagerResponse::SaeInfo(SAEInfo {
             sae_id,
             kme_id,
-            sae_certificate_serial: *sae_certificate,
+            sae_certificate_serial: sae_certificate.clone(),
         }))
     }
 }
@@ -654,6 +654,8 @@ mod tests {
     use crate::qkd_manager::http_response_obj::HttpResponseBody;
     use crate::qkd_manager::QkdManagerResponse;
 
+    const CLIENT_CERT_SERIAL_SIZE_BYTES: usize = 20;
+
     #[test]
     fn test_get_sae_id_from_certificate() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
@@ -661,11 +663,11 @@ mod tests {
         let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
         let sae_id = 1;
         let kme_id = 1;
-        let sae_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
-        key_handler.add_sae(sae_id, kme_id, &Some(sae_certificate_serial)).unwrap();
+        let sae_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
+        key_handler.add_sae(sae_id, kme_id, &Some(sae_certificate_serial.clone())).unwrap();
         assert_eq!(key_handler.get_sae_id_from_certificate(&sae_certificate_serial).unwrap(), sae_id);
 
-        let fake_sae_certificate_serial = [1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
+        let fake_sae_certificate_serial = vec![1u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
         assert_eq!(key_handler.get_sae_id_from_certificate(&fake_sae_certificate_serial), None);
     }
 
@@ -688,8 +690,8 @@ mod tests {
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
         let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
         let sae_id = 1;
-        let sae_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
-        key_handler.add_sae(sae_id, 1, &Some(sae_certificate_serial)).unwrap();
+        let sae_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
+        key_handler.add_sae(sae_id, 1, &Some(sae_certificate_serial.clone())).unwrap();
         let qkd_manager_response = key_handler.get_sae_status(&sae_certificate_serial, sae_id).unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Status(_)));
         let response_status = match qkd_manager_response {
@@ -711,7 +713,7 @@ mod tests {
         let qkd_manager_response = key_handler.get_sae_status(&sae_certificate_serial, 2);
         assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
 
-        key_handler.add_sae(2, 1, &Some([1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        key_handler.add_sae(2, 1, &Some(vec![1u8; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let qkd_manager_response = key_handler.get_sae_status(&sae_certificate_serial, 2).unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Status(_)));
         let response_status = match qkd_manager_response {
@@ -747,8 +749,8 @@ mod tests {
         let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
         let sae_id = 1;
         let kme_id = 1;
-        let sae_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
-        key_handler.add_sae(sae_id, kme_id, &Some(sae_certificate_serial)).unwrap();
+        let sae_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
+        key_handler.add_sae(sae_id, kme_id, &Some(sae_certificate_serial.clone())).unwrap();
         let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, sae_id);
         assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
 
@@ -771,7 +773,7 @@ mod tests {
         let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, 2);
         assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
 
-        key_handler.add_sae(2, kme_id, &Some([1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        key_handler.add_sae(2, kme_id, &Some(vec![1u8; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, 2).unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
         let response_keys = match qkd_manager_response {
@@ -809,10 +811,10 @@ mod tests {
         let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
         let sae_id = 1;
         let kme_id = 1;
-        let sae_1_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
-        let sae_2_certificate_serial = [1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
-        key_handler.add_sae(sae_id, kme_id, &Some(sae_1_certificate_serial)).unwrap();
-        key_handler.add_sae(2, kme_id, &Some(sae_2_certificate_serial)).unwrap();
+        let sae_1_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
+        let sae_2_certificate_serial = vec![1u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
+        key_handler.add_sae(sae_id, kme_id, &Some(sae_1_certificate_serial.clone())).unwrap();
+        key_handler.add_sae(2, kme_id, &Some(sae_2_certificate_serial.clone())).unwrap();
         let qkd_manager_response = key_handler.get_sae_keys_with_ids(&sae_1_certificate_serial, sae_id, vec!["00000000-0000-0000-0000-000000000000".to_string()]);
         assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
 
@@ -854,7 +856,7 @@ mod tests {
         let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
         let sae_id = 1;
         let kme_id = 1;
-        let sae_1_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
+        let sae_1_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
         key_handler.add_sae(sae_id, kme_id, &Some(sae_1_certificate_serial)).unwrap();
         let kme_id = key_handler.get_kme_id_from_sae_id(sae_id).unwrap();
         assert_eq!(kme_id, 1);
@@ -870,16 +872,16 @@ mod tests {
         let sae_id = 1;
         let kme_id = 1;
 
-        let sae_info = key_handler.get_sae_infos_from_certificate(&[0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        let sae_info = key_handler.get_sae_infos_from_certificate(&vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES]);
         assert!(matches!(sae_info, Err(QkdManagerResponse::NotFound)));
 
-        key_handler.add_sae(sae_id, kme_id, &Some([0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
-        let sae_info = key_handler.get_sae_infos_from_certificate(&[0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]).unwrap();
+        key_handler.add_sae(sae_id, kme_id, &Some(vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        let sae_info = key_handler.get_sae_infos_from_certificate(&vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES]).unwrap();
         assert!(matches!(sae_info, QkdManagerResponse::SaeInfo(_)));
         assert_eq!(sae_info, QkdManagerResponse::SaeInfo(super::SAEInfo {
             sae_id,
             kme_id,
-            sae_certificate_serial: [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES],
+            sae_certificate_serial: vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES],
         }));
     }
 
@@ -905,15 +907,15 @@ mod tests {
         let mut key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
         let sae_id = 1;
         let kme_id = 1;
-        let sae_certificate_serial = [0u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES];
+        let sae_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
         let _ = thread::spawn(move || {
             key_handler.run();
         });
-        command_tx.send(super::QkdManagerCommand::AddSae(sae_id, kme_id, Some(sae_certificate_serial))).unwrap();
+        command_tx.send(super::QkdManagerCommand::AddSae(sae_id, kme_id, Some(sae_certificate_serial.clone()))).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
 
-        command_tx.send(super::QkdManagerCommand::GetKeys(sae_certificate_serial, sae_id)).unwrap();
+        command_tx.send(super::QkdManagerCommand::GetKeys(sae_certificate_serial.clone(), sae_id)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
 
@@ -927,23 +929,23 @@ mod tests {
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
 
-        command_tx.send(super::QkdManagerCommand::GetKeysWithIds(sae_certificate_serial, 1, vec!["00000000-0000-0000-0000-000000000000".to_string()])).unwrap();
+        command_tx.send(super::QkdManagerCommand::GetKeysWithIds(sae_certificate_serial.clone(), 1, vec!["00000000-0000-0000-0000-000000000000".to_string()])).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
 
-        command_tx.send(super::QkdManagerCommand::GetStatus(sae_certificate_serial, 2)).unwrap();
+        command_tx.send(super::QkdManagerCommand::GetStatus(sae_certificate_serial.clone(), 2)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
 
-        command_tx.send(super::QkdManagerCommand::AddSae(2, kme_id, Some([1u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES]))).unwrap();
+        command_tx.send(super::QkdManagerCommand::AddSae(2, kme_id, Some(vec![1u8; CLIENT_CERT_SERIAL_SIZE_BYTES]))).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
 
-        command_tx.send(super::QkdManagerCommand::GetStatus(sae_certificate_serial, 2)).unwrap();
+        command_tx.send(super::QkdManagerCommand::GetStatus(sae_certificate_serial.clone(), 2)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Status(_)));
 
-        command_tx.send(super::QkdManagerCommand::GetSaeInfoFromCertificate(sae_certificate_serial)).unwrap();
+        command_tx.send(super::QkdManagerCommand::GetSaeInfoFromCertificate(sae_certificate_serial.clone())).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::SaeInfo(_)));
         assert_eq!(qkd_manager_response, QkdManagerResponse::SaeInfo(super::SAEInfo {
@@ -952,7 +954,7 @@ mod tests {
             sae_certificate_serial,
         }));
 
-        command_tx.send(super::QkdManagerCommand::GetSaeInfoFromCertificate([2u8; crate::CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        command_tx.send(super::QkdManagerCommand::GetSaeInfoFromCertificate(vec![2u8; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
 
