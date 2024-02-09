@@ -112,7 +112,7 @@ mod tests {
         let config = Config::from_json_path(JSON_CONFIG_PATH).unwrap();
         assert_eq!(config.this_kme_config.id, 1);
         assert_eq!(config.this_kme_config.sqlite_db_path, ":memory:");
-        assert_eq!(config.this_kme_config.key_directory_to_watch, "raw_keys/kme-1-1");
+        assert_eq!(config.this_kme_config.key_directory_to_watch, "tests/data/raw_keys/kme-1-1");
         assert_eq!(config.this_kme_config.saes_https_interface.listen_address, "127.0.0.1:3000");
         assert_eq!(config.this_kme_config.saes_https_interface.ca_client_cert_path, "certs/zone1/CA-zone1.crt");
         assert_eq!(config.this_kme_config.saes_https_interface.server_cert_path, "certs/zone1/kme1.crt");
@@ -123,7 +123,7 @@ mod tests {
         assert_eq!(config.this_kme_config.kmes_https_interface.server_key_path, "certs/zone1/kme1.key");
         assert_eq!(config.other_kme_configs.len(), 1);
         assert_eq!(config.other_kme_configs[0].id, 2);
-        assert_eq!(config.other_kme_configs[0].key_directory_to_watch, "raw_keys/kme-1-2");
+        assert_eq!(config.other_kme_configs[0].key_directory_to_watch, "tests/data/raw_keys/kme-1-2");
         assert_eq!(config.other_kme_configs[0].inter_kme_bind_address, "127.0.0.1:4001");
         assert_eq!(config.other_kme_configs[0].https_client_authentication_certificate, "certs/inter_kmes/client-kme1-to-kme2.pfx");
         assert_eq!(config.other_kme_configs[0].https_client_authentication_certificate_password, "");

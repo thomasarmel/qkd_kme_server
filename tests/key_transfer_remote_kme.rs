@@ -47,8 +47,8 @@ async fn test_key_transfer_other_kme() {
     assert_eq!(req_key_remote_response.status(), 404);
     assert_eq!(req_key_remote_response.text().await.unwrap(), NOT_FOUND_BODY);
 
-    const DEC_REK_REQ_BODY_2: &'static str = "{\n\"key_IDs\": [{\"key_ID\": \"4567f16a-843b-f659-9af6-d2126cb97e16\"}]\n}";
-    let req_key_remote_response = sae1_reqwest_client.post(REMOTE_DEC_KEYS_REQUEST_URL_2).header(CONTENT_TYPE, "application/json").body(DEC_REK_REQ_BODY_2).send().await;
+    const DEC_KEY_REQ_BODY_2: &'static str = "{\n\"key_IDs\": [{\"key_ID\": \"4567f16a-843b-f659-9af6-d2126cb97e16\"}]\n}";
+    let req_key_remote_response = sae1_reqwest_client.post(REMOTE_DEC_KEYS_REQUEST_URL_2).header(CONTENT_TYPE, "application/json").body(DEC_KEY_REQ_BODY_2).send().await;
     assert!(req_key_remote_response.is_ok());
     let req_key_remote_response = req_key_remote_response.unwrap();
     assert_eq!(req_key_remote_response.status(), 200);

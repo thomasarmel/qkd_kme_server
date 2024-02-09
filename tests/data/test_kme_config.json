@@ -2,7 +2,7 @@
   "this_kme": {
     "id": 1,
     "sqlite_db_path": ":memory:",
-    "key_directory_to_watch": "raw_keys/kme-1-1",
+    "key_directory_to_watch": "tests/data/raw_keys/kme-1-1",
     "saes_https_interface": {
       "listen_address": "127.0.0.1:3000",
       "ca_client_cert_path": "certs/zone1/CA-zone1.crt",
@@ -19,7 +19,7 @@
   "other_kmes": [
     {
       "id": 2,
-      "key_directory_to_watch": "raw_keys/kme-1-2",
+      "key_directory_to_watch": "tests/data/raw_keys/kme-1-2",
       "inter_kme_bind_address": "127.0.0.1:4001",
       "https_client_authentication_certificate": "certs/inter_kmes/client-kme1-to-kme2.pfx",
       "https_client_authentication_certificate_password": ""

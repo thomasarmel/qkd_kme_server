@@ -35,8 +35,7 @@ async fn main() {
         server_key_path: config.this_kme_config.kmes_https_interface.server_key_path.clone(),
     };
 
-    let qkd_manager= QkdManager::from_config(&config);
-    println!("{:?}", qkd_manager.is_err());
+    let qkd_manager = QkdManager::from_config(&config);
     let qkd_manager = qkd_manager.unwrap();
 
     select! {
