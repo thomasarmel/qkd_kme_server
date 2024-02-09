@@ -294,9 +294,9 @@ impl KeyHandler {
             // We must ensure:
             // - other KME is authenticated (client certificate and operating system trust store)
             // - other SAE belongs to other KME (statically managed for now)
-            self.activate_key_on_other_kme(origin_sae_id, target_kme_id, target_sae_id, &key_uuid).map_err(|_| {
+            self.activate_key_on_other_kme(origin_sae_id, target_kme_id, target_sae_id, &key_uuid).map_err(|qkd_manager_activation_error| {
                 error!("Error activating key on other KME");
-                QkdManagerResponse::Ko
+                qkd_manager_activation_error
             })?;
         }
 
@@ -367,7 +367,7 @@ impl KeyHandler {
         Ok(QkdManagerResponse::Ok)
     }
 
-    fn activate_key_on_other_kme(&self, caller_master_sae_id: SaeId, other_kme_id: KmeId, other_sae_id: SaeId, key_uuid: &str) -> Result<(), io::Error> {
+    fn activate_key_on_other_kme(&self, caller_master_sae_id: SaeId, other_kme_id: KmeId, other_sae_id: SaeId, key_uuid: &str) -> Result<(), QkdManagerResponse> {
         let danger_should_ignore_remote_kme_cert = match std::env::var(crate::DANGER_IGNORE_CERTS_INTER_KME_NETWORK_ENV_VARIABLE) {
             Ok(val) => val == crate::ACTIVATED_ENV_VARIABLE_VALUE,
             Err(_) => false,
@@ -378,22 +378,37 @@ impl KeyHandler {
             origin_SAE_ID: caller_master_sae_id,
             remote_SAE_ID: other_sae_id,
         };
-        let kme_classical_info = self.qkd_router.get_classical_connection_info_from_kme_id(other_kme_id).ok_or(io_err("KME ID not found"))?;
+        let kme_classical_info = match self.qkd_router.get_classical_connection_info_from_kme_id(other_kme_id) {
+            Some(info) => info,
+            None => {
+                error!("KME ID not found");
+                return Err(QkdManagerResponse::MissingRemoteKmeConfiguration);
+            },
+        };
 
         let kme_client_builer = reqwest::blocking::Client::builder().identity(kme_classical_info.tls_client_cert_identity.clone());
 
         let kme_client = if danger_should_ignore_remote_kme_cert {
-            kme_client_builer.danger_accept_invalid_certs(true).build().map_err(|_| io_err("Error building reqwest client"))?
+            kme_client_builer.danger_accept_invalid_certs(true)
         } else {
-            kme_client_builer.build().map_err(|_| io_err("Error building reqwest client"))?
-        };
+            kme_client_builer
+        }.build()
+            .map_err(|_| {
+                error!("Error building reqwest client");
+                QkdManagerResponse::Ko
+            })?;
 
         let response = kme_client.post(&format!("https://{}/keys/activate", kme_classical_info.ip_domain_port))
             .json(&req_body)
-            .send().map_err(|_| io_err("Error sending HTTP request"))?;
+            .send()
+            .map_err(|_| {
+                error!("Error sending HTTP request");
+                QkdManagerResponse::RemoteKmeCommunicationError
+            })?;
 
         if response.status() != reqwest::StatusCode::OK {
-            return Err(io_err("Error activating key on other KME"));
+            error!("Error activating key on other KME");
+            return Err(QkdManagerResponse::RemoteKmeAcceptError);
         }
 
         Ok(())
@@ -937,5 +952,18 @@ mod tests {
         command_tx.send(super::QkdManagerCommand::GetKmeIdFromSaeId(3)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
+
+        command_tx.send(super::QkdManagerCommand::AddKmeClassicalNetInfo(kme_id,
+                                                                         String::from("wrong_data"),
+                                                                         String::from("wrong_data"),
+                                                                         String::from("wrong_data"))).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Ko));
+        command_tx.send(super::QkdManagerCommand::AddKmeClassicalNetInfo(kme_id,
+                                                                         String::from("test.fr:1234"),
+                                                                         String::from("certs/inter_kmes/client-kme1-to-kme2.pfx"),
+                                                                         String::from(""))).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
     }
 }

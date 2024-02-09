@@ -77,6 +77,9 @@ impl EtsiSaeQkdRoutesV1 {
     RESPONSE_ERROR_FUNCTION!(not_found, StatusCode::NOT_FOUND, "Element not found");
     RESPONSE_ERROR_FUNCTION!(authentication_error, StatusCode::UNAUTHORIZED, "Authentication error");
     RESPONSE_ERROR_FUNCTION!(bad_request, StatusCode::BAD_REQUEST, "Bad request");
+    RESPONSE_ERROR_FUNCTION!(gateway_timeout, StatusCode::GATEWAY_TIMEOUT, "Gateway timeout (maybe a remote KME is down)");
+    RESPONSE_ERROR_FUNCTION!(precondition_failed, StatusCode::PRECONDITION_FAILED, "A precondition isn't fulfilled, maybe some configuration is missing");
+    RESPONSE_ERROR_FUNCTION!(conflict, StatusCode::CONFLICT, "There is a conflict with the requested resource, maybe resource on a remote KME are not synced");
 
     /// Creates a HTTP response 200 from a string (likely a JSON)
     /// # Arguments
@@ -140,6 +143,30 @@ mod tests {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
         assert_eq!(body, "{\n  \"message\": \"Bad request\"\n}");
+    }
+
+    #[tokio::test]
+    async fn test_gateway_timeout() {
+        let response = super::EtsiSaeQkdRoutesV1::gateway_timeout().unwrap();
+        assert_eq!(response.status(), StatusCode::GATEWAY_TIMEOUT);
+        let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+        assert_eq!(body, "{\n  \"message\": \"Gateway timeout (maybe a remote KME is down)\"\n}");
+    }
+
+    #[tokio::test]
+    async fn test_precondition_failed() {
+        let response = super::EtsiSaeQkdRoutesV1::precondition_failed().unwrap();
+        assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
+        let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+        assert_eq!(body, "{\n  \"message\": \"A precondition isn't fulfilled, maybe some configuration is missing\"\n}");
+    }
+
+    #[tokio::test]
+    async fn test_conflict() {
+        let response = super::EtsiSaeQkdRoutesV1::conflict().unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+        assert_eq!(body, "{\n  \"message\": \"There is a conflict with the requested resource, maybe resource on a remote KME are not synced\"\n}");
     }
 
     #[tokio::test]

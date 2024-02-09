@@ -101,3 +101,57 @@ pub struct SaeConfig {
     /// Client certificate serial number, used to authenticate SAEs to this KME if it belongs to, None otherwise
     pub(crate) https_client_certificate_serial: Option<SaeClientCertSerial>
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::config::Config;
+
+    #[test]
+    fn test_config_deserialization() {
+        const JSON_CONFIG_PATH: &'static str = "tests/data/test_kme_config.json";
+        let config = Config::from_json_path(JSON_CONFIG_PATH).unwrap();
+        assert_eq!(config.this_kme_config.id, 1);
+        assert_eq!(config.this_kme_config.sqlite_db_path, ":memory:");
+        assert_eq!(config.this_kme_config.key_directory_to_watch, "raw_keys/kme-1-1");
+        assert_eq!(config.this_kme_config.saes_https_interface.listen_address, "127.0.0.1:3000");
+        assert_eq!(config.this_kme_config.saes_https_interface.ca_client_cert_path, "certs/zone1/CA-zone1.crt");
+        assert_eq!(config.this_kme_config.saes_https_interface.server_cert_path, "certs/zone1/kme1.crt");
+        assert_eq!(config.this_kme_config.saes_https_interface.server_key_path, "certs/zone1/kme1.key");
+        assert_eq!(config.this_kme_config.kmes_https_interface.listen_address, "0.0.0.0:3001");
+        assert_eq!(config.this_kme_config.kmes_https_interface.ca_client_cert_path, "certs/inter_kmes/root-ca-kme1.crt");
+        assert_eq!(config.this_kme_config.kmes_https_interface.server_cert_path, "certs/zone1/kme1.crt");
+        assert_eq!(config.this_kme_config.kmes_https_interface.server_key_path, "certs/zone1/kme1.key");
+        assert_eq!(config.other_kme_configs.len(), 1);
+        assert_eq!(config.other_kme_configs[0].id, 2);
+        assert_eq!(config.other_kme_configs[0].key_directory_to_watch, "raw_keys/kme-1-2");
+        assert_eq!(config.other_kme_configs[0].inter_kme_bind_address, "127.0.0.1:4001");
+        assert_eq!(config.other_kme_configs[0].https_client_authentication_certificate, "certs/inter_kmes/client-kme1-to-kme2.pfx");
+        assert_eq!(config.other_kme_configs[0].https_client_authentication_certificate_password, "");
+        assert_eq!(config.sae_configs.len(), 3);
+        assert_eq!(config.sae_configs[0].id, 1);
+        assert_eq!(config.sae_configs[0].kme_id, 1);
+        assert_eq!(config.sae_configs[0].https_client_certificate_serial, Some([0x70, 0xF4, 0x4F, 0x56, 0x0C, 0x3F, 0x27, 0xD4, 0xB2, 0x11, 0xA4, 0x78, 0x13, 0xAF, 0xD0, 0x3C, 0x03, 0x81, 0x3B, 0x8E]));
+        assert_eq!(config.sae_configs[1].id, 2);
+        assert_eq!(config.sae_configs[1].kme_id, 1);
+        assert_eq!(config.sae_configs[1].https_client_certificate_serial, Some([0x70, 0xF4, 0x4F, 0x56, 0x0C, 0x3F, 0x27, 0xD4, 0xB2, 0x11, 0xA4, 0x78, 0x13, 0xAF, 0xD0, 0x3C, 0x03, 0x81, 0x3B, 0x92]));
+        assert_eq!(config.sae_configs[2].id, 3);
+        assert_eq!(config.sae_configs[2].kme_id, 2);
+        assert_eq!(config.sae_configs[2].https_client_certificate_serial, None);
+    }
+
+    #[test]
+    fn test_config_deserialization_error() {
+        const JSON_CONFIG_PATH: &'static str = "tests/data/test_kme_config_json_error.json";
+        let config = Config::from_json_path(JSON_CONFIG_PATH);
+        assert!(config.is_err());
+        assert_eq!(config.unwrap_err().to_string(), "Error deserializing JSON");
+    }
+
+    #[test]
+    fn test_config_deserialization_file_not_found() {
+        const JSON_CONFIG_PATH: &'static str = "this_config_json_file_doesnt_exist.json";
+        let config = Config::from_json_path(JSON_CONFIG_PATH);
+        assert!(config.is_err());
+        assert_eq!(config.unwrap_err().to_string(), "Error reading JSON file");
+    }
+}

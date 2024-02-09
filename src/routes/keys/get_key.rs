@@ -92,6 +92,15 @@ pub(in crate::routes) async fn route_get_key(rcx: & RequestContext<'_>, _req: Re
         QkdManagerResponse::NotFound => {
             super::EtsiSaeQkdRoutesV1::not_found()
         }
+        QkdManagerResponse::RemoteKmeCommunicationError => {
+            super::EtsiSaeQkdRoutesV1::gateway_timeout()
+        }
+        QkdManagerResponse::MissingRemoteKmeConfiguration => {
+            super::EtsiSaeQkdRoutesV1::precondition_failed()
+        }
+        QkdManagerResponse::RemoteKmeAcceptError => {
+            super::EtsiSaeQkdRoutesV1::conflict()
+        }
         _ => {
             super::EtsiSaeQkdRoutesV1::internal_server_error()
         }

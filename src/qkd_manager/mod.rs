@@ -355,6 +355,12 @@ pub enum QkdManagerResponse {
     Ko,
     /// The requested element hasn't been found in the database (like a key)
     NotFound,
+    /// Cannot reach other KME because it's not present on router's configuration
+    MissingRemoteKmeConfiguration,
+    /// Communication with remote KME failed, likely because of a bad configuration or a network failure
+    RemoteKmeCommunicationError,
+    /// Remote KME didn't accept the request, maybe its configuration isn't well synced with this KME
+    RemoteKmeAcceptError,
     /// Error during transmission between the QKD manager and the key handler, should never happen
     TransmissionError,
     /// The operation was not successful, the provided SAE data is inconsistent (like an authentication key if the SAE doesn't belong to the KME)
@@ -533,5 +539,31 @@ mod test {
         // SAE ID not present in database
         let response = qkd_manager.get_kme_id_from_sae_id(2);
         assert!(response.is_none());
+    }
+
+    #[test]
+    fn test_add_kme_classical_net_info() {
+        const SQLITE_DB_PATH: &'static str = ":memory:";
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234;bad_addr", "certs/inter_kmes/client-kme1-to-kme2.pfx", "");
+        assert!(response.is_err());
+        assert_eq!(response.err().unwrap(), super::QkdManagerResponse::Ko);
+
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "not-exists.pfx", "");
+        assert!(response.is_err());
+        assert_eq!(response.err().unwrap(), super::QkdManagerResponse::Ko);
+
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "certs/inter_kmes/client-kme1-to-kme2.pfx", "bad_password");
+        assert!(response.is_err());
+        assert_eq!(response.err().unwrap(), super::QkdManagerResponse::Ko);
+
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "tests/data/bad_certs/invalid_client_cert_data.pfx", "");
+        assert!(response.is_err());
+        assert_eq!(response.err().unwrap(), super::QkdManagerResponse::Ko);
+
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "certs/inter_kmes/client-kme1-to-kme2.pfx", "");
+        assert!(response.is_ok());
+        assert_eq!(response.unwrap(), super::QkdManagerResponse::Ok);
     }
 }
