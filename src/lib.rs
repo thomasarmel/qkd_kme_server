@@ -49,13 +49,21 @@ pub const MAX_QKD_KEY_SAE_IDS: usize = 0; // We don't support key multicast yet
 pub const MAX_QKD_KEYS_PER_SAE: usize = 10;
 
 /// The size of the client certificate serial number in bytes, constant
-pub const CLIENT_CERT_SERIAL_SIZE_BYTES: usize = 20;
+pub const CLIENT_CERT_SERIAL_SIZE_BYTES: usize = 20; // TODO change + no proxy + shannon entropy
 
 /// Location of the SQLite database file used by the KME to store keys, use ":memory:" for in-memory database
 pub const MEMORY_SQLITE_DB_PATH: &'static str = ":memory:";
 
 /// File extension for newly exchanged QKD keys
 pub const QKD_KEY_FILE_EXTENSION: &'static str = "cor";
+
+/// For inter-KME communication over public network, the environment variable to set to ignore certificate validation
+/// This should be set to "Y" to ignore certificate validation
+/// NOTE: This is a dangerous setting as it breaks the whole protocol security and should only be used for testing
+pub const DANGER_IGNORE_CERTS_INTER_KME_NETWORK_ENV_VARIABLE: &'static str = "QKD_KME_SERVER_DANGER_INTER_KME_IGNORE_CERT";
+
+/// The value of any boolean environment variable to be considered as activated
+pub const ACTIVATED_ENV_VARIABLE_VALUE: &'static str = "Y";
 
 /// The type of SAE ID
 pub type SaeId = i64;

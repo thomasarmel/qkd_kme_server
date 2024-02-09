@@ -130,7 +130,7 @@ impl KeyHandler {
                             }
                         }
                         QkdManagerCommand::AddKmeClassicalNetInfo(kme_id, kme_addr_or_domain, conn_client_cert, conn_cert_password) => {
-                            let add_kme_response = match self.qkd_router.add_kme_to_ip_or_domain_association(kme_id, &kme_addr_or_domain, &conn_client_cert, &conn_cert_password) {
+                            let add_kme_response = match self.qkd_router.add_kme_to_ip_domain_port_association(kme_id, &kme_addr_or_domain, &conn_client_cert, &conn_cert_password) {
                                 Ok(_) => QkdManagerResponse::Ok,
                                 Err(e) => {
                                     error!("Error adding KME classical network info: {:?}", e);
@@ -368,22 +368,34 @@ impl KeyHandler {
     }
 
     fn activate_key_on_other_kme(&self, caller_master_sae_id: SaeId, other_kme_id: KmeId, other_sae_id: SaeId, key_uuid: &str) -> Result<(), io::Error> {
+        let danger_should_ignore_remote_kme_cert = match std::env::var(crate::DANGER_IGNORE_CERTS_INTER_KME_NETWORK_ENV_VARIABLE) {
+            Ok(val) => val == crate::ACTIVATED_ENV_VARIABLE_VALUE,
+            Err(_) => false,
+        };
+
         let req_body = http_request_obj::ActivateKeyRemoteKME {
             key_ID: key_uuid.to_string(),
             origin_SAE_ID: caller_master_sae_id,
             remote_SAE_ID: other_sae_id,
         };
         let kme_classical_info = self.qkd_router.get_classical_connection_info_from_kme_id(other_kme_id).ok_or(io_err("KME ID not found"))?;
-        let kme_client = reqwest::blocking::Client::builder()
-            .identity(kme_classical_info.tls_client_cert_identity.clone())
-            .build().map_err(|_| io_err("Error building reqwest client"))?;
-        let response = kme_client.post(&format!("https://{}/keys/activate", kme_classical_info.ip_or_domain))
+
+        let kme_client_builer = reqwest::blocking::Client::builder().identity(kme_classical_info.tls_client_cert_identity.clone());
+
+        let kme_client = if danger_should_ignore_remote_kme_cert {
+            kme_client_builer.danger_accept_invalid_certs(true).build().map_err(|_| io_err("Error building reqwest client"))?
+        } else {
+            kme_client_builer.build().map_err(|_| io_err("Error building reqwest client"))?
+        };
+
+        let response = kme_client.post(&format!("https://{}/keys/activate", kme_classical_info.ip_domain_port))
             .json(&req_body)
             .send().map_err(|_| io_err("Error sending HTTP request"))?;
 
         if response.status() != reqwest::StatusCode::OK {
             return Err(io_err("Error activating key on other KME"));
         }
+
         Ok(())
     }
 

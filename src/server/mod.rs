@@ -30,6 +30,7 @@ use crate::server::certificates::{load_cert, load_pkey};
 /// # Note
 /// * SAE clients are authenticated using client certificates, and the server is authenticated using a server certificate
 /// * SAE client certificate must be signed by the CA certificate specified in the configuration, and authorized client certificates are discriminated by their serial number
+#[derive(Debug)]
 pub struct Server {
     /// HTTPS listen address, e.g. "0.0.0.0:443"
     pub listen_addr: String,
@@ -73,12 +74,12 @@ impl Server {
         })?;
 
         loop {
-            info!("Waiting for incoming connection");
+            info!("[KME{}] Waiting for incoming connection on port {}...", qkd_manager.kme_id, addr.port());
             let Ok(stream) = tls_acceptor.accept(socket.accept().await?.0).await else {
                 warn!("Error accepting connection, maybe client certificate is missing?");
                 continue;
             };
-            info!("Received connection from peer {}", stream.get_ref().0.peer_addr().map_err(|_| {
+            info!("[KME{}] Received connection from peer {}", qkd_manager.kme_id, stream.get_ref().0.peer_addr().map_err(|_| {
                 io_err("Error getting peer address")
             })?);
             let (_, server_session) = stream.get_ref();
@@ -140,7 +141,6 @@ impl Server {
             .map_err(|_| {
                 io_err("Error building server configuration")
             })?;
-
         Ok(config)
     }
 }

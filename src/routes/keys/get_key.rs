@@ -65,7 +65,7 @@ pub(in crate::routes) fn route_get_status(rcx: &RequestContext, _req: Request<bo
 //   ]
 // }
 // ```
-pub(in crate::routes) fn route_get_key(rcx: &RequestContext, _req: Request<body::Incoming>, slave_sae_id: &str) -> Result<Response<Full<Bytes>>, Infallible> {
+pub(in crate::routes) async fn route_get_key(rcx: & RequestContext<'_>, _req: Request<body::Incoming>, slave_sae_id: &str) -> Result<Response<Full<Bytes>>, Infallible> {
     // Ensure the SAE ID is an integer
     let slave_sae_id_i64 = ensure_sae_id_format_type!(slave_sae_id);
 
@@ -73,7 +73,7 @@ pub(in crate::routes) fn route_get_key(rcx: &RequestContext, _req: Request<body:
     let raw_client_certificate_serial = ensure_client_certificate_serial!(rcx);
 
     // Retrieve the key from the QKD manager
-    match rcx.qkd_manager.get_qkd_key(slave_sae_id_i64, raw_client_certificate_serial).unwrap_or_else(identity) {
+    match rcx.qkd_manager.get_qkd_key(slave_sae_id_i64, &raw_client_certificate_serial).await.unwrap_or_else(identity) {
         QkdManagerResponse::Keys(keys) => {
             // Serialize the keys to JSON
             let keys_json = match keys.to_json() {

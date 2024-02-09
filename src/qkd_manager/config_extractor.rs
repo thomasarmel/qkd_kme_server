@@ -2,6 +2,7 @@ use std::io;
 use std::io::{BufReader, Read};
 use std::path::Path;
 use std::sync::Arc;
+use log::error;
 use notify::event::{AccessKind, AccessMode};
 use notify::{EventKind, RecursiveMode, Watcher};
 use crate::config::Config;
@@ -44,7 +45,7 @@ impl ConfigExtractor {
                     }
                 }
                 Err(e) => {
-                    println!("Watch error: {:?}", e);
+                    error!("Watch error: {:?}", e);
                     return;
                 }
             }
@@ -104,9 +105,9 @@ impl ConfigExtractor {
     fn add_classical_net_routing_info_kmes(qkd_manager: Arc<QkdManager>, config: &Config) -> Result<(), io::Error> {
         for other_kme_config in &config.other_kme_configs {
             qkd_manager.add_kme_classical_net_info(other_kme_config.id,
-                                                   other_kme_config.inter_kme_bind_address.clone(),
-                                                   other_kme_config.https_client_authentication_certificate.clone(),
-                                                   other_kme_config.https_client_authentication_certificate_password.clone())
+                                                   &other_kme_config.inter_kme_bind_address,
+                                                   &other_kme_config.https_client_authentication_certificate,
+                                                   &other_kme_config.https_client_authentication_certificate_password)
                 .map_err(|e|
                     io_err(&format!("Cannot add KME classical network info: {:?}", e))
                 )?;

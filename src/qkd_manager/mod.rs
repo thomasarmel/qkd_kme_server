@@ -22,7 +22,9 @@ pub struct QkdManager {
     /// Channel to receive responses from the key handler
     response_rx: crossbeam_channel::Receiver<QkdManagerResponse>,
     /// Directory watchers for other KME keys, placed here because watch stops when dropped
-    pub(crate) dir_watcher: Arc<Mutex<Vec<notify::RecommendedWatcher>>>
+    pub(crate) dir_watcher: Arc<Mutex<Vec<notify::RecommendedWatcher>>>,
+    /// The ID of the KME this QKD manager belongs to
+    pub kme_id: KmeId,
 }
 
 impl QkdManager {
@@ -56,7 +58,8 @@ impl QkdManager {
         Self {
             command_tx,
             response_rx,
-            dir_watcher
+            dir_watcher,
+            kme_id: this_kme_id,
         }
     }
 
@@ -93,13 +96,17 @@ impl QkdManager {
     /// * `auth_client_cert_serial` - The serial number of the client certificate of caller the master SAE, to authenticate and identify the caller
     /// # Returns
     /// The requested QKD key if the key was found and the caller is authorized to retrieve it, an error otherwise
-    pub fn get_qkd_key(&self, target_sae_id: SaeId, auth_client_cert_serial: &SaeClientCertSerial) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    pub async fn get_qkd_key(&self, target_sae_id: SaeId, auth_client_cert_serial: &SaeClientCertSerial) -> Result<QkdManagerResponse, QkdManagerResponse> {
         self.command_tx.send(QkdManagerCommand::GetKeys(*auth_client_cert_serial, target_sae_id)).map_err(|_| {
             TransmissionError
         })?;
-        match self.response_rx.recv().map_err(|_| {
-            TransmissionError
-        })? {
+        let qkd_manager_response_receive_channel = self.response_rx.clone();
+        let get_qkd_key_manager_response = tokio::task::spawn_blocking(move || {
+            qkd_manager_response_receive_channel.recv().map_err(|_| {
+                TransmissionError
+            })
+        }).await.map_err(|_| TransmissionError)??;
+        match get_qkd_key_manager_response {
             QkdManagerResponse::Keys(key) => { // Keys is the QkdManagerResponse expected here
                 Ok(QkdManagerResponse::Keys(key))
             },
@@ -229,8 +236,13 @@ impl QkdManager {
     /// Ok if the KME classical network information was added successfully, an error otherwise
     /// # Notes
     /// You should also add target KME's CA certificate to the trust store of the source KME operating system
-    pub fn add_kme_classical_net_info(&self, kme_id: KmeId, kme_addr: String, client_auth_certificate_path: String, client_auth_certificate_password: String) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        self.command_tx.send(QkdManagerCommand::AddKmeClassicalNetInfo(kme_id, kme_addr, client_auth_certificate_path, client_auth_certificate_password)).map_err(|_| {
+    pub fn add_kme_classical_net_info(&self, kme_id: KmeId, kme_addr: &str, client_auth_certificate_path: &str, client_auth_certificate_password: &str) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        self.command_tx.send(QkdManagerCommand::AddKmeClassicalNetInfo(
+            kme_id,
+            kme_addr.to_string(),
+            client_auth_certificate_path.to_string(),
+            client_auth_certificate_password.to_string())
+        ).map_err(|_| {
             TransmissionError
         })?;
         match self.response_rx.recv().map_err(|_| {
@@ -362,6 +374,7 @@ pub enum QkdManagerResponse {
 
 #[cfg(test)]
 mod test {
+    use serial_test::serial;
     use crate::CLIENT_CERT_SERIAL_SIZE_BYTES;
 
     #[test]
@@ -403,29 +416,31 @@ mod test {
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::InconsistentSaeData);
     }
 
-    #[test]
-    fn test_get_qkd_key() {
+    #[tokio::test]
+    #[serial]
+    async fn test_get_qkd_key() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
         let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
         qkd_manager.add_sae(1, 1, &Some([0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         qkd_manager.add_sae(2, 2, &None).unwrap(); // No certificate as this SAE doesn't belong to KME1
         let key = super::PreInitQkdKeyWrapper::new(1, &[0; crate::QKD_KEY_SIZE_BYTES]).unwrap();
         qkd_manager.add_pre_init_qkd_key(key).unwrap();
-        let response = qkd_manager.get_qkd_key(2, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        let response = qkd_manager.get_qkd_key(2, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::NotFound);
 
-        let response = qkd_manager.get_qkd_key(1, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        let response = qkd_manager.get_qkd_key(1, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::AuthenticationError);
 
 
-        let response = qkd_manager.get_qkd_key(1, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        let response = qkd_manager.get_qkd_key(1, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
         assert!(response.is_ok());
     }
 
-    #[test]
-    fn test_get_qkd_keys_with_ids() {
+    #[tokio::test]
+    #[serial]
+    async fn test_get_qkd_keys_with_ids() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
         let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
         qkd_manager.add_sae(1, 1, &Some([0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
@@ -442,13 +457,13 @@ mod test {
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::NotFound);
 
-        let response = qkd_manager.get_qkd_key(1, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        let response = qkd_manager.get_qkd_key(1, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
         assert!(response.is_ok());
         let response = qkd_manager.get_qkd_keys_with_ids(1, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
         assert!(response.is_err());
         assert_eq!(response.unwrap_err(), super::QkdManagerResponse::NotFound);
 
-        let response = qkd_manager.get_qkd_key(2, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        let response = qkd_manager.get_qkd_key(2, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
         assert!(response.is_err());
         let response = qkd_manager.get_qkd_keys_with_ids(1, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
         assert!(response.is_err());
@@ -460,7 +475,7 @@ mod test {
         let key_uuid_str = uuid::Uuid::from_bytes(key_uuid).to_string();
         qkd_manager.add_pre_init_qkd_key(key).unwrap();
 
-        let response = qkd_manager.get_qkd_key(2, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]);
+        let response = qkd_manager.get_qkd_key(2, &[0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
         assert!(response.is_ok());
         let response = qkd_manager.get_qkd_keys_with_ids(1, &[1; CLIENT_CERT_SERIAL_SIZE_BYTES], vec![key_uuid_str.clone()]);
         assert!(response.is_ok());
