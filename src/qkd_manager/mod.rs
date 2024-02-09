@@ -236,12 +236,14 @@ impl QkdManager {
     /// Ok if the KME classical network information was added successfully, an error otherwise
     /// # Notes
     /// You should also add target KME's CA certificate to the trust store of the source KME operating system
-    pub fn add_kme_classical_net_info(&self, kme_id: KmeId, kme_addr: &str, client_auth_certificate_path: &str, client_auth_certificate_password: &str) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    pub fn add_kme_classical_net_info(&self, kme_id: KmeId, kme_addr: &str, client_auth_certificate_path: &str, client_auth_certificate_password: &str, should_ignore_system_proxy_config: bool) -> Result<QkdManagerResponse, QkdManagerResponse> {
         self.command_tx.send(QkdManagerCommand::AddKmeClassicalNetInfo(
             kme_id,
             kme_addr.to_string(),
             client_auth_certificate_path.to_string(),
-            client_auth_certificate_password.to_string())
+            client_auth_certificate_password.to_string(),
+            should_ignore_system_proxy_config
+        )
         ).map_err(|_| {
             TransmissionError
         })?;
@@ -342,7 +344,7 @@ enum QkdManagerCommand {
     /// Returns the KME ID from belonging SAE ID
     GetKmeIdFromSaeId(SaeId), // SAE id
     /// Add classical network information to a KME, used to activate keys on it for slave KMEs using "classical channel"
-    AddKmeClassicalNetInfo(KmeId, String, String, String), // KME id + KME address + client auth certificate path + client auth certificate password
+    AddKmeClassicalNetInfo(KmeId, String, String, String, bool), // KME id + KME address + client auth certificate path + client auth certificate password + should ignore system proxy settings
 }
 
 /// All possible responses from the QKD manager
@@ -546,23 +548,23 @@ mod test {
         const SQLITE_DB_PATH: &'static str = ":memory:";
         let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
 
-        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234;bad_addr", "certs/inter_kmes/client-kme1-to-kme2.pfx", "");
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234;bad_addr", "certs/inter_kmes/client-kme1-to-kme2.pfx", "", true);
         assert!(response.is_err());
         assert_eq!(response.err().unwrap(), super::QkdManagerResponse::Ko);
 
-        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "not-exists.pfx", "");
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "not-exists.pfx", "", true);
         assert!(response.is_err());
         assert_eq!(response.err().unwrap(), super::QkdManagerResponse::Ko);
 
-        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "certs/inter_kmes/client-kme1-to-kme2.pfx", "bad_password");
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "certs/inter_kmes/client-kme1-to-kme2.pfx", "bad_password", true);
         assert!(response.is_err());
         assert_eq!(response.err().unwrap(), super::QkdManagerResponse::Ko);
 
-        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "tests/data/bad_certs/invalid_client_cert_data.pfx", "");
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "tests/data/bad_certs/invalid_client_cert_data.pfx", "", true);
         assert!(response.is_err());
         assert_eq!(response.err().unwrap(), super::QkdManagerResponse::Ko);
 
-        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "certs/inter_kmes/client-kme1-to-kme2.pfx", "");
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "certs/inter_kmes/client-kme1-to-kme2.pfx", "", true);
         assert!(response.is_ok());
         assert_eq!(response.unwrap(), super::QkdManagerResponse::Ok);
     }

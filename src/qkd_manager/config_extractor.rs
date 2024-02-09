@@ -144,7 +144,8 @@ impl ConfigExtractor {
             qkd_manager.add_kme_classical_net_info(other_kme_config.id,
                                                    &other_kme_config.inter_kme_bind_address,
                                                    &other_kme_config.https_client_authentication_certificate,
-                                                   &other_kme_config.https_client_authentication_certificate_password)
+                                                   &other_kme_config.https_client_authentication_certificate_password,
+                                                    other_kme_config.ignore_system_proxy_settings)
                 .map_err(|e|
                     io_err(&format!("Cannot add KME classical network info: {:?}", e))
                 )?;

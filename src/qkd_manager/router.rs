@@ -18,7 +18,7 @@ impl QkdRouter {
         }
     }
 
-    pub(super) fn add_kme_to_ip_domain_port_association(&mut self, kme_id: KmeId, ip_or_domain: &str, client_cert_path: &str, client_cert_password: &str) -> Result<(), io::Error> {
+    pub(super) fn add_kme_to_ip_domain_port_association(&mut self, kme_id: KmeId, ip_or_domain: &str, client_cert_path: &str, client_cert_password: &str, should_ignore_system_proxy_settings: bool) -> Result<(), io::Error> {
         if !Self::check_ip_port_domain_url_validity(ip_or_domain) {
             return Err(io_err("Invalid IP, domain and port"));
         }
@@ -32,6 +32,7 @@ impl QkdRouter {
         self.kme_to_classical_network_info_associations.insert(kme_id, KmeInfoClassicalNetwork {
             ip_domain_port: ip_or_domain.to_string(),
             tls_client_cert_identity,
+            should_ignore_system_proxy_settings,
         });
         Ok(())
     }
@@ -50,6 +51,7 @@ impl QkdRouter {
 pub(super) struct KmeInfoClassicalNetwork {
     pub(super) ip_domain_port: String,
     pub(super) tls_client_cert_identity: reqwest::tls::Identity,
+    pub(super) should_ignore_system_proxy_settings: bool,
 }
 
 #[cfg(test)]
@@ -65,7 +67,7 @@ mod tests {
         let client_cert_password = "";
 
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
-        assert!(qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password).is_ok());
+        assert!(qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password, true).is_ok());
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_some());
     }
 
@@ -78,7 +80,7 @@ mod tests {
         let client_cert_password = "";
 
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
-        let qkd_router_add_result = qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password);
+        let qkd_router_add_result = qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password, true);
         assert!(qkd_router_add_result.is_err());
         assert_eq!(qkd_router_add_result.err().unwrap().to_string(), "Invalid IP, domain and port");
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
@@ -93,7 +95,7 @@ mod tests {
         let client_cert_password = "";
 
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
-        let qkd_router_add_result = qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password);
+        let qkd_router_add_result = qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password, true);
         assert!(qkd_router_add_result.is_err());
         assert_eq!(qkd_router_add_result.err().unwrap().to_string(), "Cannot open client certificate file: Os { code: 2, kind: NotFound, message: \"No such file or directory\" }");
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
@@ -108,7 +110,7 @@ mod tests {
         let client_cert_password = "";
 
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
-        let qkd_router_add_result = qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password);
+        let qkd_router_add_result = qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password, true);
         assert!(qkd_router_add_result.is_err());
         assert!(qkd_router_add_result.err().unwrap().to_string().starts_with("Cannot create client certificate identity: "));
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
@@ -123,7 +125,7 @@ mod tests {
         let client_cert_password = "this is not the password";
 
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
-        let qkd_router_add_result = qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password);
+        let qkd_router_add_result = qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password, true);
         assert!(qkd_router_add_result.is_err());
         assert!(qkd_router_add_result.err().unwrap().to_string().starts_with("Cannot create client certificate identity: "));
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());

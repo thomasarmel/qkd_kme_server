@@ -21,6 +21,7 @@
       "id": 2,
       "key_directory_to_watch": "raw_keys/kme-1-2",
       "inter_kme_bind_address": "127.0.0.1:4001",
+      "ignore_system_proxy_settings": true,
       "https_client_authentication_certificate": "certs/inter_kmes/client-kme1-to-kme2.pfx",
       "https_client_authentication_certificate_password": ""
     }

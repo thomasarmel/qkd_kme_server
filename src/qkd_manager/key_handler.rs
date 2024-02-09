@@ -129,8 +129,11 @@ impl KeyHandler {
                                 error!("Error QKD manager sending response");
                             }
                         }
-                        QkdManagerCommand::AddKmeClassicalNetInfo(kme_id, kme_addr_or_domain, conn_client_cert, conn_cert_password) => {
-                            let add_kme_response = match self.qkd_router.add_kme_to_ip_domain_port_association(kme_id, &kme_addr_or_domain, &conn_client_cert, &conn_cert_password) {
+                        QkdManagerCommand::AddKmeClassicalNetInfo(kme_id, kme_addr_or_domain, conn_client_cert, conn_cert_password, should_ignore_sysetem_proxy_settings) => {
+                            let add_kme_response = match self.qkd_router.add_kme_to_ip_domain_port_association(kme_id,
+                                                                                                               &kme_addr_or_domain,
+                                                                                                               &conn_client_cert, &conn_cert_password,
+                                                                                                               should_ignore_sysetem_proxy_settings) {
                                 Ok(_) => QkdManagerResponse::Ok,
                                 Err(e) => {
                                     error!("Error adding KME classical network info: {:?}", e);
@@ -386,13 +389,23 @@ impl KeyHandler {
             },
         };
 
-        let kme_client_builer = reqwest::blocking::Client::builder().identity(kme_classical_info.tls_client_cert_identity.clone());
+        let kme_client_builder = reqwest::blocking::Client::builder().identity(kme_classical_info.tls_client_cert_identity.clone());
 
-        let kme_client = if danger_should_ignore_remote_kme_cert {
-            kme_client_builer.danger_accept_invalid_certs(true)
+        let kme_client_builder = if danger_should_ignore_remote_kme_cert {
+            warn!("Because of {}, remote KME server certificate check is disabled. This is a dangerous setting, it breaks the whole protocol security", crate::DANGER_IGNORE_CERTS_INTER_KME_NETWORK_ENV_VARIABLE);
+            kme_client_builder.danger_accept_invalid_certs(true)
         } else {
-            kme_client_builer
-        }.build()
+            info!("Remote KME server certificate check is enabled. This is the default setting");
+            kme_client_builder
+        };
+        let kme_client_builder = if kme_classical_info.should_ignore_system_proxy_settings {
+            info!("Ignoring system proxy settings for remote KME route");
+            kme_client_builder.no_proxy()
+        } else {
+            info!("Using system proxy settings for remote KME route");
+            kme_client_builder
+        };
+        let kme_client = kme_client_builder.build()
             .map_err(|_| {
                 error!("Error building reqwest client");
                 QkdManagerResponse::Ko
@@ -956,13 +969,15 @@ mod tests {
         command_tx.send(super::QkdManagerCommand::AddKmeClassicalNetInfo(kme_id,
                                                                          String::from("wrong_data"),
                                                                          String::from("wrong_data"),
-                                                                         String::from("wrong_data"))).unwrap();
+                                                                         String::from("wrong_data"),
+                                                                         true)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Ko));
         command_tx.send(super::QkdManagerCommand::AddKmeClassicalNetInfo(kme_id,
                                                                          String::from("test.fr:1234"),
                                                                          String::from("certs/inter_kmes/client-kme1-to-kme2.pfx"),
-                                                                         String::from(""))).unwrap();
+                                                                         String::from(""),
+                                                                         true)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
     }

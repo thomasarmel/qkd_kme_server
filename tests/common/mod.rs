@@ -117,7 +117,7 @@ pub fn setup_2_kmes_network() {
                              2,
                              &None
     ).unwrap();
-    kme1_qkd_manager.add_kme_classical_net_info(2, "127.0.0.1:4001", "certs/inter_kmes/client-kme1-to-kme2.pfx", "").unwrap();
+    kme1_qkd_manager.add_kme_classical_net_info(2, "127.0.0.1:4001", "certs/inter_kmes/client-kme1-to-kme2.pfx", "", true).unwrap();
     kme1_qkd_manager.add_pre_init_qkd_key(PreInitQkdKeyWrapper::new(
         2,
         b"this_is_secret_key_1_of_32_bytes",
@@ -136,7 +136,7 @@ pub fn setup_2_kmes_network() {
                              2,
                              &Some([0x2d, 0x28, 0x6e, 0xc1, 0x77, 0x46, 0x5a, 0xb8, 0xdf, 0x00, 0x90, 0xdb, 0x04, 0x69, 0xa0, 0xab, 0x0a, 0x97, 0x38, 0x51])
     ).unwrap();
-    kme2_qkd_manager.add_kme_classical_net_info(1, "127.0.0.1:3001", "certs/inter_kmes/client-kme2-to-kme1.pfx", "").unwrap();
+    kme2_qkd_manager.add_kme_classical_net_info(1, "127.0.0.1:3001", "certs/inter_kmes/client-kme2-to-kme1.pfx", "", true).unwrap();
     kme2_qkd_manager.add_pre_init_qkd_key(PreInitQkdKeyWrapper::new(
         1,
         b"this_is_secret_key_1_of_32_bytes",
@@ -200,7 +200,7 @@ pub fn setup_2_kmes_network_keys_not_sync() {
                              2,
                              &None
     ).unwrap();
-    kme1_qkd_manager.add_kme_classical_net_info(2, "127.0.0.1:4001", "certs/inter_kmes/client-kme1-to-kme2.pfx", "").unwrap();
+    kme1_qkd_manager.add_kme_classical_net_info(2, "127.0.0.1:4001", "certs/inter_kmes/client-kme1-to-kme2.pfx", "", true).unwrap();
     kme1_qkd_manager.add_pre_init_qkd_key(PreInitQkdKeyWrapper::new(
         2,
         b"this_is_secret_key_1_of_32_bytes",
@@ -215,7 +215,7 @@ pub fn setup_2_kmes_network_keys_not_sync() {
                              2,
                              &Some([0x2d, 0x28, 0x6e, 0xc1, 0x77, 0x46, 0x5a, 0xb8, 0xdf, 0x00, 0x90, 0xdb, 0x04, 0x69, 0xa0, 0xab, 0x0a, 0x97, 0x38, 0x51])
     ).unwrap();
-    kme2_qkd_manager.add_kme_classical_net_info(1, "127.0.0.1:3001", "certs/inter_kmes/client-kme2-to-kme1.pfx", "").unwrap();
+    kme2_qkd_manager.add_kme_classical_net_info(1, "127.0.0.1:3001", "certs/inter_kmes/client-kme2-to-kme1.pfx", "", true).unwrap();
     kme2_qkd_manager.add_pre_init_qkd_key(PreInitQkdKeyWrapper::new(
         1,
         // Aie aie aie, this is not the same key :o
@@ -264,7 +264,7 @@ pub fn setup_2_kmes_network_1_kme_down() {
                              2,
                              &None
     ).unwrap();
-    kme1_qkd_manager.add_kme_classical_net_info(2, "127.0.0.1:4001", "certs/inter_kmes/client-kme1-to-kme2.pfx", "").unwrap();
+    kme1_qkd_manager.add_kme_classical_net_info(2, "127.0.0.1:4001", "certs/inter_kmes/client-kme1-to-kme2.pfx", "", true).unwrap();
     kme1_qkd_manager.add_pre_init_qkd_key(PreInitQkdKeyWrapper::new(
         2,
         b"this_is_secret_key_1_of_32_bytes",

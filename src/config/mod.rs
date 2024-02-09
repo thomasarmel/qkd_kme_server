@@ -85,6 +85,8 @@ pub struct OtherKmeConfig {
     pub(crate) key_directory_to_watch: String,
     /// IP address of the other KME, used to send keys to it using "classical channel"
     pub(crate) inter_kme_bind_address: String,
+    /// If true, the KME will ignore system proxy settings when contacting the other KME
+    pub(crate) ignore_system_proxy_settings: bool,
     /// Client certificate for inter KME HTTPS authentication
     pub(crate) https_client_authentication_certificate: String,
     /// Password for the client certificate
