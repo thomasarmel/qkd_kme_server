@@ -1,6 +1,7 @@
 use const_format::concatcp;
 use reqwest::header::CONTENT_TYPE;
 use serial_test::serial;
+use crate::common::util::assert_string_equal;
 
 mod common;
 
@@ -26,7 +27,7 @@ async fn post_dec_keys() {
     let response = response.unwrap();
     assert_eq!(response.status(), 200);
     let response_body = response.text().await.unwrap();
-    assert_eq!(response_body, EXPECTED_BODY);
+    assert_string_equal(&response_body, EXPECTED_BODY);
 }
 
 
@@ -45,7 +46,7 @@ async fn post_dec_keys_not_init() {
     let response = response.unwrap();
     assert_eq!(response.status(), 404);
     let response_body = response.text().await.unwrap();
-    assert_eq!(response_body, EXPECTED_BODY);
+    assert_string_equal(&response_body, EXPECTED_BODY);
 }
 
 #[tokio::test]

@@ -1,5 +1,6 @@
 use const_format::concatcp;
 use serial_test::serial;
+use crate::common::util::assert_string_equal;
 
 mod common;
 
@@ -17,7 +18,7 @@ async fn post_enc_keys() {
     let response = response.unwrap();
     assert_eq!(response.status(), 200);
     let response_body = response.text().await.unwrap();
-    assert_eq!(response_body, EXPECTED_BODY);
+    assert_string_equal(&response_body, EXPECTED_BODY);
 }
 
 #[tokio::test]
@@ -34,5 +35,5 @@ async fn post_enc_keys_sae_not_found() {
     let response = response.unwrap();
     assert_eq!(response.status(), 404);
     let response_body = response.text().await.unwrap();
-    assert_eq!(response_body, EXPECTED_BODY);
+    assert_string_equal(&response_body, EXPECTED_BODY);
 }

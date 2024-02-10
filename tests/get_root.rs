@@ -1,5 +1,6 @@
 use const_format::concatcp;
 use serial_test::serial;
+use crate::common::util::assert_string_equal;
 
 mod common;
 
@@ -18,7 +19,7 @@ async fn get_root_directory_good_cert_auth() {
     let response = response.unwrap();
     assert_eq!(response.status(), 404);
     let response_body = response.text().await.unwrap();
-    assert_eq!(response_body, EXPECTED_BODY);
+    assert_string_equal(&response_body, EXPECTED_BODY);
 }
 
 #[tokio::test]
@@ -32,7 +33,9 @@ async fn get_root_directory_bad_cert_auth() {
     let response = reqwest_client.get(REQUEST_URL).send().await;
     assert!(response.is_err());
     let response_error = response.unwrap_err();
-    assert!(response_error.to_string().contains(CONNECTION_RESET_ERROR));
+    if cfg!(target_os = "linux") {
+        assert!(response_error.to_string().contains(CONNECTION_RESET_ERROR));
+    }
 }
 
 #[tokio::test]
@@ -45,5 +48,7 @@ async fn get_root_directory_no_cert_auth() {
 
     let response = reqwest_client.get(REQUEST_URL).send().await;
     assert!(response.is_err());
-    assert!(response.unwrap_err().to_string().contains(CERTIFICATE_REQUIRED_ERROR));
+    if cfg!(target_os = "linux") {
+        assert!(response.unwrap_err().to_string().contains(CERTIFICATE_REQUIRED_ERROR));
+    }
 }

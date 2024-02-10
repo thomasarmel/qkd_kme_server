@@ -118,7 +118,7 @@ mod tests {
         let response = super::EtsiSaeQkdRoutesV1::internal_server_error().unwrap();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
-        assert_eq!(body, "{\n  \"message\": \"Internal server error\"\n}");
+        assert_eq!(body.replace("\r", ""), "{\n  \"message\": \"Internal server error\"\n}");
     }
 
     #[tokio::test]
@@ -126,7 +126,7 @@ mod tests {
         let response = super::EtsiSaeQkdRoutesV1::not_found().unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
-        assert_eq!(body, "{\n  \"message\": \"Element not found\"\n}");
+        assert_eq!(body.replace("\r", ""), "{\n  \"message\": \"Element not found\"\n}");
     }
 
     #[tokio::test]
@@ -134,7 +134,7 @@ mod tests {
         let response = super::EtsiSaeQkdRoutesV1::authentication_error().unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
-        assert_eq!(body, "{\n  \"message\": \"Authentication error\"\n}");
+        assert_eq!(body.replace("\r", ""), "{\n  \"message\": \"Authentication error\"\n}");
     }
 
     #[tokio::test]
@@ -142,7 +142,7 @@ mod tests {
         let response = super::EtsiSaeQkdRoutesV1::bad_request().unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
-        assert_eq!(body, "{\n  \"message\": \"Bad request\"\n}");
+        assert_eq!(body.replace("\r", ""), "{\n  \"message\": \"Bad request\"\n}");
     }
 
     #[tokio::test]
@@ -150,7 +150,7 @@ mod tests {
         let response = super::EtsiSaeQkdRoutesV1::gateway_timeout().unwrap();
         assert_eq!(response.status(), StatusCode::GATEWAY_TIMEOUT);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
-        assert_eq!(body, "{\n  \"message\": \"Gateway timeout (maybe a remote KME is down)\"\n}");
+        assert_eq!(body.replace("\r", ""), "{\n  \"message\": \"Gateway timeout (maybe a remote KME is down)\"\n}");
     }
 
     #[tokio::test]
@@ -158,7 +158,7 @@ mod tests {
         let response = super::EtsiSaeQkdRoutesV1::precondition_failed().unwrap();
         assert_eq!(response.status(), StatusCode::PRECONDITION_FAILED);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
-        assert_eq!(body, "{\n  \"message\": \"A precondition isn't fulfilled, maybe some configuration is missing\"\n}");
+        assert_eq!(body.replace("\r", ""), "{\n  \"message\": \"A precondition isn't fulfilled, maybe some configuration is missing\"\n}");
     }
 
     #[tokio::test]
@@ -166,7 +166,7 @@ mod tests {
         let response = super::EtsiSaeQkdRoutesV1::conflict().unwrap();
         assert_eq!(response.status(), StatusCode::CONFLICT);
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
-        assert_eq!(body, "{\n  \"message\": \"There is a conflict with the requested resource, maybe resource on a remote KME are not synced\"\n}");
+        assert_eq!(body.replace("\r", ""), "{\n  \"message\": \"There is a conflict with the requested resource, maybe resource on a remote KME are not synced\"\n}");
     }
 
     #[tokio::test]
@@ -175,6 +175,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers().get("content-type").unwrap(), "application/json");
         let body = String::from_utf8(response.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
-        assert_eq!(body, "{\"variable\": \"value\"}");
+        assert_eq!(body.replace("\r", ""), "{\"variable\": \"value\"}");
     }
 }

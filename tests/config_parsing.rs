@@ -37,7 +37,7 @@ async fn test_key_transfer_from_file_config() {
     let post_key_response = post_key_response.unwrap();
     assert_eq!(post_key_response.status(), 200);
     const EXPECTED_INIT_KEY_RESPONSE_BODY: &'static str = "{\n  \"keys\": [\n    {\n      \"key_ID\": \"2ae3e385-4e51-7458-b1c1-69066a4cb6d7\",\n      \"key\": \"m0gAbsCqIwYgM2HMOcc8nkh6nhZG3EBAxuL6rgas1FU=\"\n    }\n  ]\n}";
-    assert_eq!(post_key_response.text().await.unwrap(), EXPECTED_INIT_KEY_RESPONSE_BODY);
+    assert_eq!(post_key_response.text().await.unwrap().replace("\r", ""), EXPECTED_INIT_KEY_RESPONSE_BODY);
 
     const REMOTE_DEC_KEYS_REQ_BODY: &'static str = "{\n\"key_IDs\": [{\"key_ID\": \"2ae3e385-4e51-7458-b1c1-69066a4cb6d7\"}]\n}";
     let req_key_remote_response = sae2_reqwest_client.post(REMOTE_DEC_KEYS_REQUEST_URL).header(CONTENT_TYPE, "application/json").body(REMOTE_DEC_KEYS_REQ_BODY).send().await;
@@ -45,14 +45,14 @@ async fn test_key_transfer_from_file_config() {
     let req_key_remote_response = req_key_remote_response.unwrap();
     assert_eq!(req_key_remote_response.status(), 200);
     const REMOTE_DEC_KEYS_EPECTED_RESP_BODY: &'static str = "{\n  \"keys\": [\n    {\n      \"key_ID\": \"2ae3e385-4e51-7458-b1c1-69066a4cb6d7\",\n      \"key\": \"m0gAbsCqIwYgM2HMOcc8nkh6nhZG3EBAxuL6rgas1FU=\"\n    }\n  ]\n}";
-    assert_eq!(req_key_remote_response.text().await.unwrap(), REMOTE_DEC_KEYS_EPECTED_RESP_BODY);
+    assert_eq!(req_key_remote_response.text().await.unwrap().replace("\r", ""), REMOTE_DEC_KEYS_EPECTED_RESP_BODY);
 
     let post_key_response = sae2_reqwest_client.post(INIT_POST_KEY_REQUEST_URL_2).send().await;
     assert!(post_key_response.is_ok());
     let post_key_response = post_key_response.unwrap();
     assert_eq!(post_key_response.status(), 200);
     const EXPECTED_BODY_ENC_KEY_2: &'static str = "{\n  \"keys\": [\n    {\n      \"key_ID\": \"9768257a-1c59-d255-a93d-d4bb1b693651\",\n      \"key\": \"zNK/zOIUDAFyuKRM0dSJLLZVYaDTuhzhAIACBgWABfY=\"\n    }\n  ]\n}";
-    assert_eq!(post_key_response.text().await.unwrap(), EXPECTED_BODY_ENC_KEY_2);
+    assert_eq!(post_key_response.text().await.unwrap().replace("\r", ""), EXPECTED_BODY_ENC_KEY_2);
 
     const DEC_REK_REQ_BODY_2: &'static str = "{\n\"key_IDs\": [{\"key_ID\": \"9768257a-1c59-d255-a93d-d4bb1b693651\"}]\n}";
     let req_key_remote_response = sae1_reqwest_client.post(REMOTE_DEC_KEYS_REQUEST_URL_2).header(CONTENT_TYPE, "application/json").body(DEC_REK_REQ_BODY_2).send().await;
@@ -60,7 +60,7 @@ async fn test_key_transfer_from_file_config() {
     let req_key_remote_response = req_key_remote_response.unwrap();
     assert_eq!(req_key_remote_response.status(), 200);
     const EXPECTED_BODY_DEC_KEY_2: &'static str = "{\n  \"keys\": [\n    {\n      \"key_ID\": \"9768257a-1c59-d255-a93d-d4bb1b693651\",\n      \"key\": \"zNK/zOIUDAFyuKRM0dSJLLZVYaDTuhzhAIACBgWABfY=\"\n    }\n  ]\n}";
-    assert_eq!(req_key_remote_response.text().await.unwrap(), EXPECTED_BODY_DEC_KEY_2);
+    assert_eq!(req_key_remote_response.text().await.unwrap().replace("\r", ""), EXPECTED_BODY_DEC_KEY_2);
 }
 
 // Quite similar to program's main function

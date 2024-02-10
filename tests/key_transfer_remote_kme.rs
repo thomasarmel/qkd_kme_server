@@ -1,6 +1,7 @@
 use const_format::concatcp;
 use reqwest::header::CONTENT_TYPE;
 use serial_test::serial;
+use crate::common::util::assert_string_equal;
 
 mod common;
 
@@ -26,26 +27,26 @@ async fn test_key_transfer_other_kme() {
     assert!(post_key_response.is_ok());
     let post_key_response = post_key_response.unwrap();
     assert_eq!(post_key_response.status(), 200);
-    assert_eq!(post_key_response.text().await.unwrap(), EXPECTED_INIT_KEY_RESPONSE_BODY);
+    assert_string_equal(&post_key_response.text().await.unwrap(), EXPECTED_INIT_KEY_RESPONSE_BODY);
 
     let req_key_remote_response = sae2_reqwest_client.post(REMOTE_DEC_KEYS_REQUEST_URL).header(CONTENT_TYPE, "application/json").body(REMOTE_DEC_KEYS_REQ_BODY).send().await;
     assert!(req_key_remote_response.is_ok());
     let req_key_remote_response = req_key_remote_response.unwrap();
     assert_eq!(req_key_remote_response.status(), 200);
-    assert_eq!(req_key_remote_response.text().await.unwrap(), REMOTE_DEC_KEYS_EPECTED_RESP_BODY);
+    assert_string_equal(&req_key_remote_response.text().await.unwrap(), REMOTE_DEC_KEYS_EPECTED_RESP_BODY);
 
     let post_key_response = sae2_reqwest_client.post(INIT_POST_KEY_REQUEST_URL_2).send().await;
     assert!(post_key_response.is_ok());
     let post_key_response = post_key_response.unwrap();
     assert_eq!(post_key_response.status(), 200);
     const EXPECTED_BODY_ENC_KEY_2: &'static str = "{\n  \"keys\": [\n    {\n      \"key_ID\": \"4567f16a-843b-f659-9af6-d2126cb97e16\",\n      \"key\": \"dGhpc19pc19zZWNyZXRfa2V5XzJfb2ZfMzJfYnl0ZXM=\"\n    }\n  ]\n}";
-    assert_eq!(post_key_response.text().await.unwrap(), EXPECTED_BODY_ENC_KEY_2);
+    assert_string_equal(&post_key_response.text().await.unwrap(), EXPECTED_BODY_ENC_KEY_2);
 
     let req_key_remote_response = sae1_reqwest_client.post(REMOTE_DEC_KEYS_REQUEST_URL_2).header(CONTENT_TYPE, "application/json").body(REMOTE_DEC_KEYS_REQ_BODY).send().await;
     assert!(req_key_remote_response.is_ok());
     let req_key_remote_response = req_key_remote_response.unwrap();
     assert_eq!(req_key_remote_response.status(), 404);
-    assert_eq!(req_key_remote_response.text().await.unwrap(), NOT_FOUND_BODY);
+    assert_string_equal(&req_key_remote_response.text().await.unwrap(), NOT_FOUND_BODY);
 
     const DEC_KEY_REQ_BODY_2: &'static str = "{\n\"key_IDs\": [{\"key_ID\": \"4567f16a-843b-f659-9af6-d2126cb97e16\"}]\n}";
     let req_key_remote_response = sae1_reqwest_client.post(REMOTE_DEC_KEYS_REQUEST_URL_2).header(CONTENT_TYPE, "application/json").body(DEC_KEY_REQ_BODY_2).send().await;
@@ -53,7 +54,7 @@ async fn test_key_transfer_other_kme() {
     let req_key_remote_response = req_key_remote_response.unwrap();
     assert_eq!(req_key_remote_response.status(), 200);
     const EXPECTED_BODY_DEC_KEY_2: &'static str = "{\n  \"keys\": [\n    {\n      \"key_ID\": \"4567f16a-843b-f659-9af6-d2126cb97e16\",\n      \"key\": \"dGhpc19pc19zZWNyZXRfa2V5XzJfb2ZfMzJfYnl0ZXM=\"\n    }\n  ]\n}";
-    assert_eq!(req_key_remote_response.text().await.unwrap(), EXPECTED_BODY_DEC_KEY_2);
+    assert_string_equal(&req_key_remote_response.text().await.unwrap(), EXPECTED_BODY_DEC_KEY_2);
 }
 
 #[tokio::test]
@@ -71,7 +72,7 @@ async fn test_key_transfer_other_kme_down() {
     assert!(post_key_response.is_ok());
     let post_key_response = post_key_response.unwrap();
     assert_eq!(post_key_response.status(), 504);
-    assert_eq!(post_key_response.text().await.unwrap(), EXPECTED_INIT_KEY_RESPONSE_BODY_GATEWAY_ERROR);
+    assert_string_equal(&post_key_response.text().await.unwrap(), EXPECTED_INIT_KEY_RESPONSE_BODY_GATEWAY_ERROR);
 }
 
 #[tokio::test]
@@ -89,7 +90,7 @@ async fn test_key_transfer_missing_other_kme_conf() {
     assert!(post_key_response.is_ok());
     let post_key_response = post_key_response.unwrap();
     assert_eq!(post_key_response.status(), 412);
-    assert_eq!(post_key_response.text().await.unwrap(), EXPECTED_INIT_KEY_RESPONSE_BODY_PRECONDITION_FAILED);
+    assert_string_equal(&post_key_response.text().await.unwrap(), EXPECTED_INIT_KEY_RESPONSE_BODY_PRECONDITION_FAILED);
 }
 
 #[tokio::test]
@@ -107,5 +108,5 @@ async fn test_key_transfer_keys_not_sync() {
     assert!(post_key_response.is_ok());
     let post_key_response = post_key_response.unwrap();
     assert_eq!(post_key_response.status(), 409);
-    assert_eq!(post_key_response.text().await.unwrap(), EXPECTED_INIT_KEY_RESPONSE_CONFLICT);
+    assert_string_equal(&post_key_response.text().await.unwrap(), EXPECTED_INIT_KEY_RESPONSE_CONFLICT);
 }

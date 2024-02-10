@@ -97,7 +97,9 @@ mod tests {
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
         let qkd_router_add_result = qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password, true);
         assert!(qkd_router_add_result.is_err());
-        assert_eq!(qkd_router_add_result.err().unwrap().to_string(), "Cannot open client certificate file: Os { code: 2, kind: NotFound, message: \"No such file or directory\" }");
+        if cfg!(target_os = "linux") {
+            assert_eq!(qkd_router_add_result.err().unwrap().to_string(), "Cannot open client certificate file: Os { code: 2, kind: NotFound, message: \"No such file or directory\" }");
+        }
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
     }
 

@@ -108,7 +108,7 @@ mod test {
             message: "test".to_string(),
         };
         let response_error_json = response_error.to_json().unwrap();
-        assert_eq!(response_error_json, "{\n  \"message\": \"test\"\n}");
+        assert_eq!(response_error_json.replace("\r", ""), "{\n  \"message\": \"test\"\n}");
     }
 
     #[test]
@@ -127,7 +127,7 @@ mod test {
             max_SAE_ID_count: 1,
         };
         let response_qkd_keys_status_json = response_qkd_keys_status.to_json().unwrap();
-        assert_eq!(response_qkd_keys_status_json, "{\n  \"source_KME_ID\": \"source_KME_ID\",\n  \"target_KME_ID\": \"target_KME_ID\",\n  \"master_SAE_ID\": \"master_SAE_ID\",\n  \"slave_SAE_ID\": \"slave_SAE_ID\",\n  \"key_size\": 128,\n  \"stored_key_count\": 1,\n  \"max_key_count\": 1,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 128,\n  \"min_key_size\": 128,\n  \"max_SAE_ID_count\": 1\n}");
+        assert_eq!(response_qkd_keys_status_json.replace("\r", ""), "{\n  \"source_KME_ID\": \"source_KME_ID\",\n  \"target_KME_ID\": \"target_KME_ID\",\n  \"master_SAE_ID\": \"master_SAE_ID\",\n  \"slave_SAE_ID\": \"slave_SAE_ID\",\n  \"key_size\": 128,\n  \"stored_key_count\": 1,\n  \"max_key_count\": 1,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 128,\n  \"min_key_size\": 128,\n  \"max_SAE_ID_count\": 1\n}");
     }
 
     #[test]
@@ -139,7 +139,7 @@ mod test {
         let response_qkd_key_list_json = super::ResponseQkdKeysList {
             keys: vec![response_qkd_key],
         }.to_json().unwrap();
-        assert_eq!(response_qkd_key_list_json, "{\n  \"keys\": [\n    {\n      \"key_ID\": \"key_ID\",\n      \"key\": \"key\"\n    }\n  ]\n}");
+        assert_eq!(response_qkd_key_list_json.replace("\r", ""), "{\n  \"keys\": [\n    {\n      \"key_ID\": \"key_ID\",\n      \"key\": \"key\"\n    }\n  ]\n}");
     }
 
     #[test]
@@ -149,6 +149,6 @@ mod test {
             KME_ID: 1,
         };
         let response_qkd_sae_info_json = response_qkd_sae_info.to_json().unwrap();
-        assert_eq!(response_qkd_sae_info_json, "{\n  \"SAE_ID\": 1,\n  \"KME_ID\": 1\n}");
+        assert_eq!(response_qkd_sae_info_json.replace("\r", ""), "{\n  \"SAE_ID\": 1,\n  \"KME_ID\": 1\n}");
     }
 }
