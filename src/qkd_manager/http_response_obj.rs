@@ -98,6 +98,13 @@ pub(crate) struct ResponseQkdKeysList {
 }
 impl HttpResponseBody for ResponseQkdKeysList {}
 
+#[derive(serde::Serialize, Debug, PartialEq)]
+pub(crate) struct ResponseTotalKeysEntropy {
+    pub(crate) total_entropy: f64,
+}
+
+impl HttpResponseBody for ResponseTotalKeysEntropy {}
+
 #[cfg(test)]
 mod test {
     use crate::qkd_manager::http_response_obj::HttpResponseBody;
@@ -150,5 +157,14 @@ mod test {
         };
         let response_qkd_sae_info_json = response_qkd_sae_info.to_json().unwrap();
         assert_eq!(response_qkd_sae_info_json.replace("\r", ""), "{\n  \"SAE_ID\": 1,\n  \"KME_ID\": 1\n}");
+    }
+
+    #[test]
+    fn test_serialize_response_total_keys_entropy() {
+        let response_total_keys_entropy = super::ResponseTotalKeysEntropy {
+            total_entropy: 1.0,
+        };
+        let response_total_keys_entropy_json = response_total_keys_entropy.to_json().unwrap();
+        assert_eq!(response_total_keys_entropy_json.replace("\r", ""), "{\n  \"total_entropy\": 1.0\n}");
     }
 }

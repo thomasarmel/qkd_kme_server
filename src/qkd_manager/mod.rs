@@ -12,7 +12,8 @@ use log::error;
 use sha1::Digest;
 use crate::qkd_manager::http_response_obj::ResponseQkdKeysList;
 use crate::qkd_manager::QkdManagerResponse::TransmissionError;
-use crate::{KmeId, QkdEncKey, SaeClientCertSerial, SaeId};
+use crate::{io_err, KmeId, QkdEncKey, SaeClientCertSerial, SaeId};
+use crate::entropy::{EntropyAccumulator, ShannonEntropyAccumulator};
 
 /// QKD manager interface, can be cloned for instance in each request handler task
 #[derive(Clone)]
@@ -25,6 +26,8 @@ pub struct QkdManager {
     pub(crate) dir_watcher: Arc<Mutex<Vec<notify::RecommendedWatcher>>>,
     /// The ID of the KME this QKD manager belongs to
     pub kme_id: KmeId,
+    /// Shannon's entropy calculator for keys stored in the database
+    shannon_entropy_calculator: Arc<Mutex<ShannonEntropyAccumulator>>,
 }
 
 impl QkdManager {
@@ -60,6 +63,7 @@ impl QkdManager {
             response_rx,
             dir_watcher,
             kme_id: this_kme_id,
+            shannon_entropy_calculator: Arc::new(Mutex::new(ShannonEntropyAccumulator::new())),
         }
     }
 
@@ -74,20 +78,27 @@ impl QkdManager {
     }
 
     /// Add a new QKD key to the database
+    /// Increases the total entropy of all keys in the database
     /// # Arguments
     /// * `key` - The QKD key to add (key + origin SAE ID + target SAE ID)
     /// # Returns
     /// Ok if the key was added successfully, an error otherwise
     pub fn add_pre_init_qkd_key(&self, key: PreInitQkdKeyWrapper) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        self.command_tx.send(QkdManagerCommand::AddPreInitKey(key)).map_err(|_| {
+        const EXPECTED_QKD_MANAGER_RESPONSE: QkdManagerResponse = QkdManagerResponse::Ok;
+
+        self.command_tx.send(QkdManagerCommand::AddPreInitKey(key.to_owned())).map_err(|_| {
             TransmissionError
         })?;
-        match self.response_rx.recv().map_err(|_| {
+        let add_key_status = self.response_rx.recv().map_err(|_| {
             TransmissionError
-        })? {
-            QkdManagerResponse::Ok => Ok(QkdManagerResponse::Ok), // Ok is the QkdManagerResponse expected here
-            qkd_response_error => Err(qkd_response_error),
+        })?;
+        if add_key_status != EXPECTED_QKD_MANAGER_RESPONSE {
+            return Err(add_key_status);
         }
+        self.shannon_entropy_calculator.lock().map_err(|_| {
+            TransmissionError
+        })?.add_bytes(&key.key);
+        Ok(EXPECTED_QKD_MANAGER_RESPONSE)
     }
 
     /// Get a QKD key from the database (shall be called by the master SAE)
@@ -254,6 +265,20 @@ impl QkdManager {
             qkd_response_error => Err(qkd_response_error),
         }
     }
+
+    /// Get the Shannon entropy of all stored keys
+    /// # Returns
+    /// The total Shannon entropy of all stored keys, an error in case of concurrency issues
+    pub async fn get_total_keys_shannon_entropy(&self) -> Result<f64, io::Error> {
+        let entropy_calculator = Arc::clone(&self.shannon_entropy_calculator);
+        Ok(tokio::task::spawn_blocking(move || {
+            Ok::<f64, io::Error>(entropy_calculator
+                .lock()
+                .map_err(|_| io_err("Mutex locking error"))?
+                .get_entropy())
+        }).await
+            .map_err(|_| io_err("Async task error"))??)
+    }
 }
 
 /// A Pre-init QKD key, with its origin and target KME IDs
@@ -383,17 +408,34 @@ pub enum QkdManagerResponse {
 #[cfg(test)]
 mod test {
     use serial_test::serial;
+    use crate::QkdEncKey;
 
     const CLIENT_CERT_SERIAL_SIZE_BYTES: usize = 20;
 
-    #[test]
-    fn test_add_qkd_key() {
+    #[tokio::test]
+    async fn test_add_qkd_key() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
         let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
         let key = super::PreInitQkdKeyWrapper::new(1, &[0; crate::QKD_KEY_SIZE_BYTES]).unwrap();
         let response = qkd_manager.add_pre_init_qkd_key(key);
         assert!(response.is_ok());
         assert_eq!(response.unwrap(), super::QkdManagerResponse::Ok);
+        assert_eq!(qkd_manager.get_total_keys_shannon_entropy().await.unwrap(), 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_stored_keys_entropy() {
+        const SQLITE_DB_PATH: &'static str = ":memory:";
+        let first_key: QkdEncKey = <[u8; crate::QKD_KEY_SIZE_BYTES]>::try_from("ABCDEFGHIJKLMNOPQRSTUVWXYZ012345".as_bytes()).unwrap();
+        let second_key: QkdEncKey = <[u8; crate::QKD_KEY_SIZE_BYTES]>::try_from("6789+-abcdefghijklmnopqrstuvwxyz".as_bytes()).unwrap();
+
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+        let key = super::PreInitQkdKeyWrapper::new(1, &first_key).unwrap();
+        qkd_manager.add_pre_init_qkd_key(key).unwrap();
+        assert_eq!(qkd_manager.get_total_keys_shannon_entropy().await.unwrap(), 5.0);
+        let key = super::PreInitQkdKeyWrapper::new(1, &second_key).unwrap();
+        qkd_manager.add_pre_init_qkd_key(key).unwrap();
+        assert_eq!(qkd_manager.get_total_keys_shannon_entropy().await.unwrap(), 6.0);
     }
 
     #[test]

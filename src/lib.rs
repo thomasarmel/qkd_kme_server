@@ -15,6 +15,7 @@ pub mod server;
 pub mod routes;
 pub mod qkd_manager;
 pub mod config;
+pub(crate) mod entropy;
 
 
 /// Cast a string to an io::Error
@@ -83,5 +84,3 @@ mod test {
         assert_eq!(err.to_string(), "test");
     }
 }
-
-// TODO shannon entropy
