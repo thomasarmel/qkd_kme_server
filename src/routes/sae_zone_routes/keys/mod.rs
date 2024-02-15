@@ -4,13 +4,14 @@ use std::convert::Infallible;
 use http_body_util::Full;
 use hyper::{body, Request, Response};
 use hyper::body::Bytes;
-use crate::routes::{EtsiSaeQkdRoutesV1, RequestContext};
+use crate::routes::RequestContext;
+use crate::routes::sae_zone_routes::EtsiSaeQkdRoutesV1;
 
 mod get_key;
 mod route_entropy;
 
 /// Dispatches the request to the correct function
-pub(super) async fn key_handler(rcx: &RequestContext<'_>, req: Request<body::Incoming>, uri_segments: &[&str]) -> Result<Response<Full<Bytes>>, Infallible> {
+pub(in crate::routes) async fn key_handler(rcx: &RequestContext<'_>, req: Request<body::Incoming>, uri_segments: &[&str]) -> Result<Response<Full<Bytes>>, Infallible> {
     match (uri_segments, req.method()) {
         // Get the status of key(s) from a master SAE (how many keys are available etc.)
         ([slave_sae_id, "status"], &hyper::Method::GET) => get_key::route_get_status(rcx, req, slave_sae_id),

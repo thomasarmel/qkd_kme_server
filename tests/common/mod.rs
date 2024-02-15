@@ -7,19 +7,19 @@ use std::io::Read;
 use std::sync::Arc;
 use tokio::select;
 use qkd_kme_server::qkd_manager::{PreInitQkdKeyWrapper, QkdManager};
-use qkd_kme_server::routes::EtsiSaeQkdRoutesV1;
+use qkd_kme_server::routes::sae_zone_routes::EtsiSaeQkdRoutesV1;
 use qkd_kme_server::routes::inter_kmes_routes::InterKMEsRoutes;
 
 pub const HOST_PORT: &'static str = "localhost:3000";
 pub const REMOTE_KME_HOST_PORT: &'static str = "localhost:4000";
 
 pub fn setup() {
-    let server = qkd_kme_server::server::Server {
-        listen_addr: "127.0.0.1:3000".to_string(),
-        ca_client_cert_path: "certs/zone1/CA-zone1.crt".to_string(),
-        server_cert_path: "certs/zone1/kme1.crt".to_string(),
-        server_key_path: "certs/zone1/kme1.key".to_string(),
-    };
+    let server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
+        "127.0.0.1:3000",
+        "certs/zone1/CA-zone1.crt",
+        "certs/zone1/kme1.crt",
+        "certs/zone1/kme1.key",
+    );
 
     let qkd_manager = QkdManager::new(":memory:", 1);
     qkd_manager.add_sae(1,
@@ -39,7 +39,7 @@ pub fn setup() {
     ).unwrap();
     qkd_manager.add_pre_init_qkd_key(qkd_key_2).unwrap();
 
-    tokio::spawn(async move {server.run::<EtsiSaeQkdRoutesV1>(&qkd_manager).await.unwrap();});
+    tokio::spawn(async move {server.run(&qkd_manager).await.unwrap();});
 }
 
 pub fn setup_cert_auth_reqwest_client() -> reqwest::Client {
@@ -84,31 +84,31 @@ pub fn setup_cert_auth_reqwest_bad_client() -> reqwest::Client {
 }
 
 pub fn setup_2_kmes_network() {
-    let kme1_internal_sae_server = qkd_kme_server::server::Server {
-        listen_addr: "127.0.0.1:3000".to_string(),
-        ca_client_cert_path: "certs/zone1/CA-zone1.crt".to_string(),
-        server_cert_path: "certs/zone1/kme1.crt".to_string(),
-        server_key_path: "certs/zone1/kme1.key".to_string(),
-    };
-    let kme2_internal_sae_server = qkd_kme_server::server::Server {
-        listen_addr: "127.0.0.1:4000".to_string(),
-        ca_client_cert_path: "certs/zone2/CA-zone2.crt".to_string(),
-        server_cert_path: "certs/zone2/kme2.crt".to_string(),
-        server_key_path: "certs/zone2/kme2.key".to_string(),
-    };
+    let kme1_internal_sae_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
+        "127.0.0.1:3000",
+        "certs/zone1/CA-zone1.crt",
+        "certs/zone1/kme1.crt",
+        "certs/zone1/kme1.key",
+    );
+    let kme2_internal_sae_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
+        "127.0.0.1:4000",
+        "certs/zone2/CA-zone2.crt",
+        "certs/zone2/kme2.crt",
+        "certs/zone2/kme2.key",
+    );
 
-    let kme1_external_inter_kmes_server = qkd_kme_server::server::Server {
-        listen_addr: "0.0.0.0:3001".to_string(),
-        ca_client_cert_path: "certs/inter_kmes/root-ca-kme1.crt".to_string(),
-        server_cert_path: "certs/zone1/kme1.crt".to_string(),
-        server_key_path: "certs/zone1/kme1.key".to_string(),
-    };
-    let kme2_external_inter_kmes_server = qkd_kme_server::server::Server {
-        listen_addr: "0.0.0.0:4001".to_string(),
-        ca_client_cert_path: "certs/inter_kmes/root-ca-kme2.crt".to_string(),
-        server_cert_path: "certs/zone2/kme2.crt".to_string(),
-        server_key_path: "certs/zone2/kme2.key".to_string(),
-    };
+    let kme1_external_inter_kmes_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
+        "0.0.0.0:3001",
+        "certs/inter_kmes/root-ca-kme1.crt",
+        "certs/zone1/kme1.crt",
+        "certs/zone1/kme1.key",
+    );
+    let kme2_external_inter_kmes_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
+        "0.0.0.0:4001",
+        "certs/inter_kmes/root-ca-kme2.crt",
+        "certs/zone2/kme2.crt",
+        "certs/zone2/kme2.key",
+    );
 
     let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1));
     kme1_qkd_manager.add_sae(1,
@@ -150,16 +150,16 @@ pub fn setup_2_kmes_network() {
 
     tokio::spawn(async move {
         select! {
-            x = kme1_internal_sae_server.run::<EtsiSaeQkdRoutesV1>(&kme1_qkd_manager) => {
+            x = kme1_internal_sae_server.run(&kme1_qkd_manager) => {
                 eprintln!("Error running internal SAE server: {:?}", x);
             },
-            x = kme1_external_inter_kmes_server.run::<InterKMEsRoutes>(&kme1_qkd_manager) => {
+            x = kme1_external_inter_kmes_server.run(&kme1_qkd_manager) => {
                 eprintln!("Error running external inter-KMEs server: {:?}", x);
             },
-            x = kme2_internal_sae_server.run::<EtsiSaeQkdRoutesV1>(&kme2_qkd_manager) => {
+            x = kme2_internal_sae_server.run(&kme2_qkd_manager) => {
                 eprintln!("Error running internal SAE server: {:?}", x);
             },
-            x = kme2_external_inter_kmes_server.run::<InterKMEsRoutes>(&kme2_qkd_manager) => {
+            x = kme2_external_inter_kmes_server.run(&kme2_qkd_manager) => {
                 eprintln!("Error running external inter-KMEs server: {:?}", x);
             },
         }
@@ -167,31 +167,31 @@ pub fn setup_2_kmes_network() {
 }
 
 pub fn setup_2_kmes_network_keys_not_sync() {
-    let kme1_internal_sae_server = qkd_kme_server::server::Server {
-        listen_addr: "127.0.0.1:3000".to_string(),
-        ca_client_cert_path: "certs/zone1/CA-zone1.crt".to_string(),
-        server_cert_path: "certs/zone1/kme1.crt".to_string(),
-        server_key_path: "certs/zone1/kme1.key".to_string(),
-    };
-    let kme2_internal_sae_server = qkd_kme_server::server::Server {
-        listen_addr: "127.0.0.1:4000".to_string(),
-        ca_client_cert_path: "certs/zone2/CA-zone2.crt".to_string(),
-        server_cert_path: "certs/zone2/kme2.crt".to_string(),
-        server_key_path: "certs/zone2/kme2.key".to_string(),
-    };
+    let kme1_internal_sae_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
+        "127.0.0.1:3000",
+        "certs/zone1/CA-zone1.crt",
+        "certs/zone1/kme1.crt",
+        "certs/zone1/kme1.key",
+    );
+    let kme2_internal_sae_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
+        "127.0.0.1:4000",
+        "certs/zone2/CA-zone2.crt",
+        "certs/zone2/kme2.crt",
+        "certs/zone2/kme2.key",
+    );
 
-    let kme1_external_inter_kmes_server = qkd_kme_server::server::Server {
-        listen_addr: "0.0.0.0:3001".to_string(),
-        ca_client_cert_path: "certs/inter_kmes/root-ca-kme1.crt".to_string(),
-        server_cert_path: "certs/zone1/kme1.crt".to_string(),
-        server_key_path: "certs/zone1/kme1.key".to_string(),
-    };
-    let kme2_external_inter_kmes_server = qkd_kme_server::server::Server {
-        listen_addr: "0.0.0.0:4001".to_string(),
-        ca_client_cert_path: "certs/inter_kmes/root-ca-kme2.crt".to_string(),
-        server_cert_path: "certs/zone2/kme2.crt".to_string(),
-        server_key_path: "certs/zone2/kme2.key".to_string(),
-    };
+    let kme1_external_inter_kmes_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
+        "0.0.0.0:3001",
+        "certs/inter_kmes/root-ca-kme1.crt",
+        "certs/zone1/kme1.crt",
+        "certs/zone1/kme1.key",
+    );
+    let kme2_external_inter_kmes_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
+        "0.0.0.0:4001",
+        "certs/inter_kmes/root-ca-kme2.crt",
+        "certs/zone2/kme2.crt",
+        "certs/zone2/kme2.key",
+    );
 
     let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1));
     kme1_qkd_manager.add_sae(1,
@@ -226,16 +226,16 @@ pub fn setup_2_kmes_network_keys_not_sync() {
 
     tokio::spawn(async move {
         select! {
-            x = kme1_internal_sae_server.run::<EtsiSaeQkdRoutesV1>(&kme1_qkd_manager) => {
+            x = kme1_internal_sae_server.run(&kme1_qkd_manager) => {
                 eprintln!("Error running internal SAE server: {:?}", x);
             },
-            x = kme1_external_inter_kmes_server.run::<InterKMEsRoutes>(&kme1_qkd_manager) => {
+            x = kme1_external_inter_kmes_server.run(&kme1_qkd_manager) => {
                 eprintln!("Error running external inter-KMEs server: {:?}", x);
             },
-            x = kme2_internal_sae_server.run::<EtsiSaeQkdRoutesV1>(&kme2_qkd_manager) => {
+            x = kme2_internal_sae_server.run(&kme2_qkd_manager) => {
                 eprintln!("Error running internal SAE server: {:?}", x);
             },
-            x = kme2_external_inter_kmes_server.run::<InterKMEsRoutes>(&kme2_qkd_manager) => {
+            x = kme2_external_inter_kmes_server.run(&kme2_qkd_manager) => {
                 eprintln!("Error running external inter-KMEs server: {:?}", x);
             },
         }
@@ -243,19 +243,18 @@ pub fn setup_2_kmes_network_keys_not_sync() {
 }
 
 pub fn setup_2_kmes_network_1_kme_down() {
-    let kme1_internal_sae_server = qkd_kme_server::server::Server {
-        listen_addr: "127.0.0.1:3000".to_string(),
-        ca_client_cert_path: "certs/zone1/CA-zone1.crt".to_string(),
-        server_cert_path: "certs/zone1/kme1.crt".to_string(),
-        server_key_path: "certs/zone1/kme1.key".to_string(),
-    };
-
-    let kme1_external_inter_kmes_server = qkd_kme_server::server::Server {
-        listen_addr: "0.0.0.0:3001".to_string(),
-        ca_client_cert_path: "certs/inter_kmes/root-ca-kme1.crt".to_string(),
-        server_cert_path: "certs/zone1/kme1.crt".to_string(),
-        server_key_path: "certs/zone1/kme1.key".to_string(),
-    };
+    let kme1_internal_sae_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
+        "127.0.0.1:3000",
+        "certs/zone1/CA-zone1.crt",
+        "certs/zone1/kme1.crt",
+        "certs/zone1/kme1.key",
+    );
+    let kme1_external_inter_kmes_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
+        "0.0.0.0:3001",
+        "certs/inter_kmes/root-ca-kme1.crt",
+        "certs/zone1/kme1.crt",
+        "certs/zone1/kme1.key",
+    );
 
     let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1));
     kme1_qkd_manager.add_sae(1,
@@ -279,10 +278,10 @@ pub fn setup_2_kmes_network_1_kme_down() {
 
     tokio::spawn(async move {
         select! {
-            x = kme1_internal_sae_server.run::<EtsiSaeQkdRoutesV1>(&kme1_qkd_manager) => {
+            x = kme1_internal_sae_server.run(&kme1_qkd_manager) => {
                 eprintln!("Error running internal SAE server: {:?}", x);
             },
-            x = kme1_external_inter_kmes_server.run::<InterKMEsRoutes>(&kme1_qkd_manager) => {
+            x = kme1_external_inter_kmes_server.run(&kme1_qkd_manager) => {
                 eprintln!("Error running external inter-KMEs server: {:?}", x);
             },
         }
@@ -290,19 +289,18 @@ pub fn setup_2_kmes_network_1_kme_down() {
 }
 
 pub fn setup_2_kmes_network_missing_conf() {
-    let kme1_internal_sae_server = qkd_kme_server::server::Server {
-        listen_addr: "127.0.0.1:3000".to_string(),
-        ca_client_cert_path: "certs/zone1/CA-zone1.crt".to_string(),
-        server_cert_path: "certs/zone1/kme1.crt".to_string(),
-        server_key_path: "certs/zone1/kme1.key".to_string(),
-    };
-
-    let kme1_external_inter_kmes_server = qkd_kme_server::server::Server {
-        listen_addr: "0.0.0.0:3001".to_string(),
-        ca_client_cert_path: "certs/inter_kmes/root-ca-kme1.crt".to_string(),
-        server_cert_path: "certs/zone1/kme1.crt".to_string(),
-        server_key_path: "certs/zone1/kme1.key".to_string(),
-    };
+    let kme1_internal_sae_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
+        "127.0.0.1:3000",
+        "certs/zone1/CA-zone1.crt",
+        "certs/zone1/kme1.crt",
+        "certs/zone1/kme1.key",
+    );
+    let kme1_external_inter_kmes_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
+        "0.0.0.0:3001",
+        "certs/inter_kmes/root-ca-kme1.crt",
+        "certs/zone1/kme1.crt",
+        "certs/zone1/kme1.key",
+    );
 
     let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1));
     kme1_qkd_manager.add_sae(1,
@@ -325,10 +323,10 @@ pub fn setup_2_kmes_network_missing_conf() {
 
     tokio::spawn(async move {
         select! {
-            x = kme1_internal_sae_server.run::<EtsiSaeQkdRoutesV1>(&kme1_qkd_manager) => {
+            x = kme1_internal_sae_server.run(&kme1_qkd_manager) => {
                 eprintln!("Error running internal SAE server: {:?}", x);
             },
-            x = kme1_external_inter_kmes_server.run::<InterKMEsRoutes>(&kme1_qkd_manager) => {
+            x = kme1_external_inter_kmes_server.run(&kme1_qkd_manager) => {
                 eprintln!("Error running external inter-KMEs server: {:?}", x);
             },
         }

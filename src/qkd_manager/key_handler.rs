@@ -2,6 +2,7 @@
 
 use std::convert::identity;
 use std::io;
+use std::sync::Arc;
 use uuid::Bytes;
 use x509_parser::nom::AsBytes;
 use crate::{io_err, KmeId, qkd_manager, SaeClientCertSerial, SaeId};
@@ -10,6 +11,8 @@ use base64::{engine::general_purpose, Engine as _};
 use log::{error, info, warn};
 use crate::qkd_manager::http_response_obj::{ResponseQkdKey, ResponseQkdKeysList};
 use crate::ensure_prepared_statement_ok;
+use crate::export_important_logging_message;
+use crate::event_subscription::ImportantEventSubscriber;
 
 /// Describes the key handler that will check authentication and manage the QKD keys in the database in a separate thread
 pub(super) struct KeyHandler {
@@ -23,6 +26,8 @@ pub(super) struct KeyHandler {
     this_kme_id: KmeId,
     /// Router on classical network, used to connect to other KMEs over unsecure classical network
     qkd_router: router::QkdRouter,
+    /// Subscribers to important events, for demonstration purpose
+    event_notification_subscribers: Vec<Arc<dyn ImportantEventSubscriber>>,
 }
 
 impl KeyHandler {
@@ -48,6 +53,7 @@ impl KeyHandler {
             })?,
             this_kme_id,
             qkd_router: router::QkdRouter::new(),
+            event_notification_subscribers: vec![],
         };
         // Create the tables if they do not exist
         key_handler.sqlite_db.execute(DATABASE_INIT_REQ).map_err(|e| {
@@ -143,6 +149,9 @@ impl KeyHandler {
                             if self.response_tx.send(add_kme_response).is_err() {
                                 error!("Error QKD manager sending response");
                             }
+                        }
+                        QkdManagerCommand::AddImportantEventSubscriber(subscriber) => {
+                            self.event_notification_subscribers.push(subscriber);
                         }
                     }
                 }
@@ -266,6 +275,8 @@ impl KeyHandler {
         let origin_kme_id = self.this_kme_id;
         let target_kme_id = self.get_kme_id_from_sae_id(target_sae_id).ok_or(QkdManagerResponse::NotFound)?;
 
+        export_important_logging_message!(&self, &format!("[KME {}] SAE {} requested a key to communicate with {}", self.this_kme_id, origin_sae_id, target_sae_id));
+
         let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, FETCH_PREINIT_KEY_PREPARED_STATEMENT);
         stmt.bind((1, target_kme_id)).map_err(|_| {
             error!("Error binding target KME ID");
@@ -301,6 +312,7 @@ impl KeyHandler {
                 error!("Error activating key on other KME");
                 qkd_manager_activation_error
             })?;
+            export_important_logging_message!(&self, &format!("[KME {}] As SAE {} belongs to KME {}, activating it through inter KMEs network", self.this_kme_id, target_sae_id, target_kme_id));
         }
 
         self.delete_pre_init_key_with_id(id).map_err(|_| {
@@ -451,6 +463,7 @@ impl KeyHandler {
             error!("Error executing SQL statement");
             QkdManagerResponse::Ko
         })?;
+        export_important_logging_message!(&self, &format!("[KME {}] Key {} activated between SAEs {} and {}", self.this_kme_id, key_uuid, origin_sae_id, target_sae_id));
         Ok(QkdManagerResponse::Ok)
     }
 
@@ -518,6 +531,8 @@ impl KeyHandler {
                 error!("Error reading SQL statement result");
                 QkdManagerResponse::Ko
             })?;
+
+            export_important_logging_message!(&self, &format!("[KME {}] SAE {} requested key {} (from {})", self.this_kme_id, current_sae_id, key_uuid, origin_sae_id));
 
             // Encode the key in base64
             Ok(ResponseQkdKey {
@@ -647,14 +662,48 @@ macro_rules! ensure_prepared_statement_ok {
     }
 }
 
+/// Notify all subscribers of an event
+/// # Arguments
+/// * `key_handler_reference` - The reference to the key handler, like `&self`
+/// * `message` - The message to notify, as string slice
+#[macro_export]
+macro_rules! export_important_logging_message {
+    ($key_handler_reference:expr, $message:expr) => {
+        info!("{}", $message);
+        for subscriber in $key_handler_reference.event_notification_subscribers.iter() {
+            let _ = subscriber.notify($message); // We ignore the result here
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
+    use std::io::Error;
+    use std::sync::{Arc, Mutex};
     use std::thread;
+    use crate::event_subscription::ImportantEventSubscriber;
     use crate::qkd_manager::http_response_obj::HttpResponseBody;
     use crate::qkd_manager::QkdManagerResponse;
 
     const CLIENT_CERT_SERIAL_SIZE_BYTES: usize = 20;
+
+    struct TestImportantEventSubscriber {
+        events: Mutex<Vec<String>>,
+    }
+    impl TestImportantEventSubscriber {
+        fn new() -> Self {
+            Self {
+                events: Mutex::new(Vec::new()),
+            }
+        }
+    }
+    impl ImportantEventSubscriber for TestImportantEventSubscriber {
+        fn notify(&self, message: &str) -> Result<(), Error> {
+            self.events.lock().unwrap().push(message.to_string());
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_get_sae_id_from_certificate() {
@@ -901,16 +950,53 @@ mod tests {
     }
 
     #[test]
+    fn test_add_important_event_subscriber() {
+        let (_, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, _) = crossbeam_channel::unbounded();
+        let mut key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+
+        let subscriber = Arc::new(TestImportantEventSubscriber::new());
+        let subscriber2 = Arc::new(TestImportantEventSubscriber::new());
+
+        key_handler.event_notification_subscribers.push(Arc::clone(&subscriber) as Arc<dyn ImportantEventSubscriber>);
+        key_handler.event_notification_subscribers.push(Arc::clone(&subscriber2) as Arc<dyn ImportantEventSubscriber>);
+        assert_eq!(key_handler.event_notification_subscribers.len(), 2);
+        assert_eq!(subscriber.events.lock().unwrap().len(), 0);
+        assert_eq!(subscriber2.events.lock().unwrap().len(), 0);
+
+        let sae_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
+        key_handler.add_sae(1, 1, &Some(sae_certificate_serial.clone())).unwrap();
+        key_handler.add_preinit_qkd_key(crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
+            key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
+            key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
+        }).unwrap();
+        key_handler.get_sae_keys(&sae_certificate_serial, 1).unwrap();
+
+        assert_eq!(subscriber.events.lock().unwrap().len(), 2);
+        assert_eq!(subscriber2.events.lock().unwrap().len(), 2);
+        assert_eq!(subscriber.events.lock().unwrap()[0], "[KME 1] SAE 1 requested a key to communicate with 1");
+        assert_eq!(subscriber.events.lock().unwrap()[1], "[KME 1] Key 00000000-0000-0000-0000-000000000000 activated between SAEs 1 and 1");
+        assert_eq!(subscriber2.events.lock().unwrap()[0], "[KME 1] SAE 1 requested a key to communicate with 1");
+        assert_eq!(subscriber2.events.lock().unwrap()[1], "[KME 1] Key 00000000-0000-0000-0000-000000000000 activated between SAEs 1 and 1");
+    }
+
+    #[test]
     fn test_run() {
         let (command_tx, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, response_rx) = crossbeam_channel::unbounded();
         let mut key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+
+        let subscriber = Arc::new(TestImportantEventSubscriber::new());
+        key_handler.event_notification_subscribers.push(Arc::clone(&subscriber) as Arc<dyn ImportantEventSubscriber>);
+
         let sae_id = 1;
         let kme_id = 1;
         let sae_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
         let _ = thread::spawn(move || {
             key_handler.run();
         });
+
         command_tx.send(super::QkdManagerCommand::AddSae(sae_id, kme_id, Some(sae_certificate_serial.clone()))).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
@@ -932,6 +1018,9 @@ mod tests {
         command_tx.send(super::QkdManagerCommand::GetKeysWithIds(sae_certificate_serial.clone(), 1, vec!["00000000-0000-0000-0000-000000000000".to_string()])).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
+
+        assert_eq!(subscriber.events.lock().unwrap().len(), 1);
+        assert_eq!(subscriber.events.lock().unwrap()[0], "[KME 1] SAE 1 requested a key to communicate with 1");
 
         command_tx.send(super::QkdManagerCommand::GetStatus(sae_certificate_serial.clone(), 2)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
@@ -982,5 +1071,7 @@ mod tests {
                                                                          true)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
+
+        assert_eq!(subscriber.events.lock().unwrap().len(), 1);
     }
 }

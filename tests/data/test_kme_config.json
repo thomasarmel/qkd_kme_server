@@ -14,7 +14,8 @@
       "ca_client_cert_path": "certs/inter_kmes/root-ca-kme1.crt",
       "server_cert_path": "certs/zone1/kme1.crt",
       "server_key_path": "certs/zone1/kme1.key"
-    }
+    },
+    "debugging_http_interface": "127.0.0.1:8080"
   },
   "other_kmes": [
     {

@@ -12,6 +12,7 @@ use log::{error, warn};
 use crate::qkd_manager::http_request_obj::RequestListKeysIds;
 use crate::{ensure_sae_id_format_type, SaeId};
 use crate::ensure_client_certificate_serial;
+use crate::routes::sae_zone_routes::EtsiSaeQkdRoutesV1;
 
 
 /// Route to get the key status (how many keys are available etc.) from a master SAE
@@ -21,7 +22,7 @@ pub(in crate::routes) fn route_get_status(rcx: &RequestContext, _req: Request<bo
     let raw_client_certificate = match rcx.get_client_certificate_serial_as_raw() {
         Ok(serial) => serial,
         Err(_) => {
-            return super::EtsiSaeQkdRoutesV1::authentication_error();
+            return EtsiSaeQkdRoutesV1::authentication_error();
         }
     };
 
@@ -36,17 +37,17 @@ pub(in crate::routes) fn route_get_status(rcx: &RequestContext, _req: Request<bo
                 Ok(json) => json,
                 Err(_) => {
                     error!("Error serializing key status");
-                    return super::EtsiSaeQkdRoutesV1::internal_server_error();
+                    return EtsiSaeQkdRoutesV1::internal_server_error();
                 }
             };
             // Return the key status as a response
-            Ok(crate::routes::EtsiSaeQkdRoutesV1::json_response_from_str(&key_status_json))
+            Ok(EtsiSaeQkdRoutesV1::json_response_from_str(&key_status_json))
         }
         QkdManagerResponse::AuthenticationError => {
-            super::EtsiSaeQkdRoutesV1::authentication_error()
+            EtsiSaeQkdRoutesV1::authentication_error()
         }
         _ => {
-            super::EtsiSaeQkdRoutesV1::internal_server_error()
+            EtsiSaeQkdRoutesV1::internal_server_error()
         }
     }
 }
@@ -80,29 +81,29 @@ pub(in crate::routes) async fn route_get_key(rcx: & RequestContext<'_>, _req: Re
                 Ok(json) => json,
                 Err(_) => {
                     error!("Error serializing keys");
-                    return super::EtsiSaeQkdRoutesV1::internal_server_error();
+                    return EtsiSaeQkdRoutesV1::internal_server_error();
                 }
             };
             // Return the key(s) as a response
-            Ok(crate::routes::EtsiSaeQkdRoutesV1::json_response_from_str(&keys_json))
+            Ok(EtsiSaeQkdRoutesV1::json_response_from_str(&keys_json))
         }
         QkdManagerResponse::AuthenticationError => {
-            super::EtsiSaeQkdRoutesV1::authentication_error()
+            EtsiSaeQkdRoutesV1::authentication_error()
         }
         QkdManagerResponse::NotFound => {
-            super::EtsiSaeQkdRoutesV1::not_found()
+            EtsiSaeQkdRoutesV1::not_found()
         }
         QkdManagerResponse::RemoteKmeCommunicationError => {
-            super::EtsiSaeQkdRoutesV1::gateway_timeout()
+            EtsiSaeQkdRoutesV1::gateway_timeout()
         }
         QkdManagerResponse::MissingRemoteKmeConfiguration => {
-            super::EtsiSaeQkdRoutesV1::precondition_failed()
+            EtsiSaeQkdRoutesV1::precondition_failed()
         }
         QkdManagerResponse::RemoteKmeAcceptError => {
-            super::EtsiSaeQkdRoutesV1::conflict()
+            EtsiSaeQkdRoutesV1::conflict()
         }
         _ => {
-            super::EtsiSaeQkdRoutesV1::internal_server_error()
+            EtsiSaeQkdRoutesV1::internal_server_error()
         }
     }
 }
@@ -143,7 +144,7 @@ pub(in crate::routes) async fn route_get_key_with_id(rcx: &RequestContext<'_>, r
     let post_body_bytes = match req.into_body().collect().await {
         Ok(bytes) => bytes.to_bytes(),
         Err(_) => {
-            return super::EtsiSaeQkdRoutesV1::bad_request();
+            return EtsiSaeQkdRoutesV1::bad_request();
         }
     };
 
@@ -151,7 +152,7 @@ pub(in crate::routes) async fn route_get_key_with_id(rcx: &RequestContext<'_>, r
     let request_list_keys_ids: RequestListKeysIds = match serde_json::from_slice(&post_body_bytes) {
         Ok(request_list_keys_ids) => request_list_keys_ids,
         Err(_) => {
-            return super::EtsiSaeQkdRoutesV1::bad_request();
+            return EtsiSaeQkdRoutesV1::bad_request();
         }
     };
 
@@ -170,20 +171,20 @@ pub(in crate::routes) async fn route_get_key_with_id(rcx: &RequestContext<'_>, r
                 Ok(json) => json,
                 Err(_) => {
                     error!("Error serializing keys");
-                    return super::EtsiSaeQkdRoutesV1::internal_server_error();
+                    return EtsiSaeQkdRoutesV1::internal_server_error();
                 }
             };
             // Return the key(s) as a response
-            Ok(crate::routes::EtsiSaeQkdRoutesV1::json_response_from_str(&keys_json))
+            Ok(EtsiSaeQkdRoutesV1::json_response_from_str(&keys_json))
         }
         QkdManagerResponse::AuthenticationError => {
-            super::EtsiSaeQkdRoutesV1::authentication_error()
+            EtsiSaeQkdRoutesV1::authentication_error()
         }
         QkdManagerResponse::NotFound => {
-            super::EtsiSaeQkdRoutesV1::not_found()
+            EtsiSaeQkdRoutesV1::not_found()
         }
         _ => {
-            super::EtsiSaeQkdRoutesV1::internal_server_error()
+            EtsiSaeQkdRoutesV1::internal_server_error()
         }
     }
 }

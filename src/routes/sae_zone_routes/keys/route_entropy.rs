@@ -5,6 +5,7 @@ use hyper::body::Bytes;
 use log::error;
 use crate::qkd_manager::http_response_obj::HttpResponseBody;
 use crate::routes::request_context::RequestContext;
+use crate::routes::sae_zone_routes::EtsiSaeQkdRoutesV1;
 
 pub(in crate::routes) async fn route_get_entropy_total(rcx: &RequestContext<'_>, _req: Request<body::Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
     // Get the total entropy from stored keys
@@ -12,7 +13,7 @@ pub(in crate::routes) async fn route_get_entropy_total(rcx: &RequestContext<'_>,
         Ok(entropy) => entropy,
         Err(e) => {
             error!("Error getting total entropy: {}", e.to_string());
-            return super::EtsiSaeQkdRoutesV1::internal_server_error();
+            return EtsiSaeQkdRoutesV1::internal_server_error();
         }
     };
     let total_entropy_response_obj = crate::qkd_manager::http_response_obj::ResponseTotalKeysEntropy {
@@ -23,8 +24,8 @@ pub(in crate::routes) async fn route_get_entropy_total(rcx: &RequestContext<'_>,
         Ok(json) => json,
         Err(_) => {
             error!("Error serializing total entropy object");
-            return super::EtsiSaeQkdRoutesV1::internal_server_error();
+            return EtsiSaeQkdRoutesV1::internal_server_error();
         }
     };
-    Ok(crate::routes::EtsiSaeQkdRoutesV1::json_response_from_str(&total_entropy_response_obj_json))
+    Ok(EtsiSaeQkdRoutesV1::json_response_from_str(&total_entropy_response_obj_json))
 }

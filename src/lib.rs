@@ -16,6 +16,7 @@ pub mod routes;
 pub mod qkd_manager;
 pub mod config;
 pub(crate) mod entropy;
+pub mod event_subscription;
 
 
 /// Cast a string to an io::Error

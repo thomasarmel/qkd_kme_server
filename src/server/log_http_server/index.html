@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>List of received events from QKD key exchange</title>
+</head>
+<body>
+<h1>Events</h1>
+<div id="event_list"></div>
+<script>
+    const eventList = document.getElementById('event_list');
+    setInterval(() => {
+        fetch('/messages')
+            .then(response => response.json())
+            .then(events => {
+                eventList.innerHTML = events.map(event => {
+                    return `<p>${event}</p>`;
+                }).join('');
+            });
+    }, 500);
+</script>
+</body>
+</html>

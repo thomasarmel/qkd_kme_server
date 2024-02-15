@@ -14,6 +14,7 @@ use crate::qkd_manager::http_response_obj::ResponseQkdKeysList;
 use crate::qkd_manager::QkdManagerResponse::TransmissionError;
 use crate::{io_err, KmeId, QkdEncKey, SaeClientCertSerial, SaeId};
 use crate::entropy::{EntropyAccumulator, ShannonEntropyAccumulator};
+use crate::event_subscription::ImportantEventSubscriber;
 
 /// QKD manager interface, can be cloned for instance in each request handler task
 #[derive(Clone)]
@@ -279,6 +280,19 @@ impl QkdManager {
         }).await
             .map_err(|_| io_err("Async task error"))??)
     }
+
+    /// ## [demonstration purpose]
+    /// Add subscriber implementing ImportantEventSubscriber trait, that will receive message for all important events.
+    /// Events are something like "SAE 1 requested a key for SAE2", or "KME 1 activated a key for SAE 2"
+    /// # Arguments
+    /// * `subscriber` - The subscriber to add, must implement ImportantEventSubscriber trait
+    /// # Returns
+    /// Ok if the subscriber was added successfully, an error otherwise (likely thread communication error)
+    pub fn add_important_event_subscriber(&self, subscriber: Arc<dyn ImportantEventSubscriber>) -> Result<(), io::Error> {
+        self.command_tx.send(QkdManagerCommand::AddImportantEventSubscriber(subscriber))
+            .map_err(|_| io_err("Error sending command to QKD manager"))?;
+        Ok(())
+    }
 }
 
 /// A Pre-init QKD key, with its origin and target KME IDs
@@ -370,6 +384,8 @@ enum QkdManagerCommand {
     GetKmeIdFromSaeId(SaeId), // SAE id
     /// Add classical network information to a KME, used to activate keys on it for slave KMEs using "classical channel"
     AddKmeClassicalNetInfo(KmeId, String, String, String, bool), // KME id + KME address + client auth certificate path + client auth certificate password + should ignore system proxy settings
+    /// Add subscriber implementing ImportantEventSubscriber trait, that will receive message for all important events (demonstration purpose)
+    AddImportantEventSubscriber(Arc<dyn ImportantEventSubscriber>),
 }
 
 /// All possible responses from the QKD manager
@@ -407,7 +423,11 @@ pub enum QkdManagerResponse {
 
 #[cfg(test)]
 mod test {
+    use std::io::Error;
+    use std::ops::{Deref, DerefMut};
+    use std::sync::{Arc, Mutex};
     use serial_test::serial;
+    use crate::event_subscription::ImportantEventSubscriber;
     use crate::QkdEncKey;
 
     const CLIENT_CERT_SERIAL_SIZE_BYTES: usize = 20;
@@ -610,5 +630,43 @@ mod test {
         let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "certs/inter_kmes/client-kme1-to-kme2.pfx", "", true);
         assert!(response.is_ok());
         assert_eq!(response.unwrap(), super::QkdManagerResponse::Ok);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_add_important_event_subscriber() {
+        struct TestImportantEventSubscriber {
+            events: Mutex<Vec<String>>,
+        }
+        impl TestImportantEventSubscriber {
+            fn new() -> Self {
+                Self {
+                    events: Mutex::new(Vec::new()),
+                }
+            }
+        }
+        impl ImportantEventSubscriber for TestImportantEventSubscriber {
+            fn notify(&self, message: &str) -> Result<(), Error> {
+                self.events.lock().unwrap().push(message.to_string());
+                Ok(())
+            }
+        }
+        const SQLITE_DB_PATH: &'static str = ":memory:";
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+        let subscriber = Arc::new(TestImportantEventSubscriber::new());
+        let response = qkd_manager.add_important_event_subscriber(Arc::clone(&subscriber) as Arc<dyn ImportantEventSubscriber>);
+        assert!(response.is_ok());
+        assert_eq!(subscriber.events.lock().unwrap().deref().len(), 0);
+
+        // Request a key
+        qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        let key = super::PreInitQkdKeyWrapper::new(1, &[0; crate::QKD_KEY_SIZE_BYTES]).unwrap();
+        qkd_manager.add_pre_init_qkd_key(key).unwrap();
+        let response = qkd_manager.get_qkd_key(1, &vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
+        assert!(response.is_ok());
+
+        assert_eq!(subscriber.events.lock().unwrap().deref().len(), 2);
+        assert_eq!(subscriber.events.lock().unwrap().deref_mut().pop(), Some("[KME 1] Key 7b848ade-8cff-3d54-a9b8-53a215e6ee77 activated between SAEs 1 and 1".to_string()));
+        assert_eq!(subscriber.events.lock().unwrap().deref_mut().pop(), Some("[KME 1] SAE 1 requested a key to communicate with 1".to_string()));
     }
 }

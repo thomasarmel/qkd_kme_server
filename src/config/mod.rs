@@ -47,7 +47,9 @@ pub struct ThisKmeConfig {
     /// # Note you should listen only on secured internal network
     pub saes_https_interface: SAEsHttpsInterfaceConfig,
     /// Config for external HTTPS interface for other KMEs
-    pub kmes_https_interface: KMEsHttpsInterfaceConfig
+    pub kmes_https_interface: KMEsHttpsInterfaceConfig,
+    /// Optional HTTP interface to see important debugging events
+    pub debugging_http_interface: Option<String>,
 }
 
 /// Config for internal HTTPS interface for SAEs (likely secured local network)
@@ -123,6 +125,7 @@ mod tests {
         assert_eq!(config.this_kme_config.kmes_https_interface.ca_client_cert_path, "certs/inter_kmes/root-ca-kme1.crt");
         assert_eq!(config.this_kme_config.kmes_https_interface.server_cert_path, "certs/zone1/kme1.crt");
         assert_eq!(config.this_kme_config.kmes_https_interface.server_key_path, "certs/zone1/kme1.key");
+        assert_eq!(config.this_kme_config.debugging_http_interface, Some("127.0.0.1:8080".to_string()));
         assert_eq!(config.other_kme_configs.len(), 1);
         assert_eq!(config.other_kme_configs[0].id, 2);
         assert_eq!(config.other_kme_configs[0].key_directory_to_watch, "tests/data/raw_keys/kme-1-2");

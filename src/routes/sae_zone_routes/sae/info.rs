@@ -8,6 +8,7 @@ use hyper::body::Bytes;
 use log::error;
 use crate::qkd_manager::http_response_obj::HttpResponseBody;
 use crate::routes::request_context::RequestContext;
+use crate::routes::sae_zone_routes::EtsiSaeQkdRoutesV1;
 
 /// Allows a SAE to retrieve its own information
 /// eg `GET /api/v1/sae/info/me`
@@ -16,7 +17,7 @@ pub(in crate::routes) async fn route_get_info_me(rcx: &RequestContext<'_>, _req:
     let client_cert_serial = match rcx.get_client_certificate_serial_as_raw() {
         Ok(serial) => serial,
         Err(_) => {
-            return crate::routes::EtsiSaeQkdRoutesV1::authentication_error()
+            return EtsiSaeQkdRoutesV1::authentication_error()
         }
     };
     // Retrieve the SAE ID from the QKD manager, given the client certificate serial
@@ -24,7 +25,7 @@ pub(in crate::routes) async fn route_get_info_me(rcx: &RequestContext<'_>, _req:
         Ok(sae_info) => sae_info,
         Err(_) => {
             // Client certificate serial isn't registered in the QKD manager
-            return crate::routes::EtsiSaeQkdRoutesV1::not_found()
+            return EtsiSaeQkdRoutesV1::not_found()
         }
     };
 
@@ -35,12 +36,12 @@ pub(in crate::routes) async fn route_get_info_me(rcx: &RequestContext<'_>, _req:
     };
     match sae_info_response_obj.to_json() {
         Ok(json) => {
-            Ok(crate::routes::EtsiSaeQkdRoutesV1::json_response_from_str(&json))
+            Ok(EtsiSaeQkdRoutesV1::json_response_from_str(&json))
         }
         Err(_) => {
             // Error serializing the response object, should never happen
             error!("Error serializing SAE info");
-            crate::routes::EtsiSaeQkdRoutesV1::internal_server_error()
+            EtsiSaeQkdRoutesV1::internal_server_error()
         }
     }
 }

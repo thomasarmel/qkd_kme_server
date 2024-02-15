@@ -9,6 +9,7 @@
       "server_cert_path": "certs/zone1/kme1.crt",
       "server_key_path": "certs/zone1/kme1.key"
     },
+    "debugging_http_interface": "0.0.0.0:8080",
     "kmes_https_interface": {
       "listen_address": "0.0.0.0:3001",
       "ca_client_cert_path": "certs/inter_kmes/root-ca-kme1.crt",
