@@ -133,7 +133,7 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(1)).await; // To ensure server task is scheduled before client
         let get_index_response = reqwest::get("http://127.0.0.1:8080").await.unwrap();
         assert_eq!(get_index_response.status(), 200);
-        assert_eq!(get_index_response.text().await.unwrap().replace("\r", ""), EXPECTED_INDEX_BODY);
+        assert_eq!(get_index_response.text().await.unwrap(), EXPECTED_INDEX_BODY);
 
         let get_messages_response = reqwest::get("http://127.0.0.1:8080/messages").await.unwrap();
         assert_eq!(get_messages_response.status(), 200);
