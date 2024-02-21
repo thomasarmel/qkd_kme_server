@@ -1,7 +1,6 @@
 //! Routes for intra private SAE network server, shall be called by internal SAEs, for example to request keys
 
 use std::convert::Infallible;
-use async_trait::async_trait;
 use http_body_util::Full;
 use hyper::{body, Request, Response, StatusCode};
 use hyper::body::Bytes;
@@ -21,9 +20,8 @@ mod sae;
 /// Struct representing the routes of the server for the v1 version of the API
 pub struct EtsiSaeQkdRoutesV1 {}
 
-#[async_trait]
 impl Routes for EtsiSaeQkdRoutesV1 {
-    async fn handle_request(req: Request<body::Incoming>, client_cert: Option<&CertificateDer>, qkd_manager: QkdManager) -> Result<Response<Full<Bytes>>, Infallible> {
+    async fn handle_request(req: Request<body::Incoming>, client_cert: Option<&CertificateDer<'_>>, qkd_manager: QkdManager) -> Result<Response<Full<Bytes>>, Infallible> {
         let path = req.uri().path().to_owned();
 
         // Create the request context

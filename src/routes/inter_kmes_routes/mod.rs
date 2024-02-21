@@ -1,7 +1,6 @@
 //! Describes routes for specific inter KME channels over public network, generally to activate keys on remote KMEs
 
 use std::convert::Infallible;
-use async_trait::async_trait;
 use http_body_util::Full;
 use hyper::body::{Bytes, Incoming};
 use hyper::{Request, Response, StatusCode};
@@ -14,9 +13,8 @@ use crate::routes::Routes;
 /// Routes for inter KMEs communication over public network
 pub struct InterKMEsRoutes {}
 
-#[async_trait]
 impl Routes for InterKMEsRoutes {
-    async fn handle_request(req: Request<Incoming>, _client_cert: Option<&CertificateDer>, qkd_manager: QkdManager) -> Result<Response<Full<Bytes>>, Infallible> {
+    async fn handle_request(req: Request<Incoming>, _client_cert: Option<&CertificateDer<'_>>, qkd_manager: QkdManager) -> Result<Response<Full<Bytes>>, Infallible> {
         let path = req.uri().path().to_owned();
         if path != "/keys/activate" {
             return Ok(Response::builder().status(StatusCode::NOT_FOUND).body(Full::new(Bytes::from(String::from("Not found")))).unwrap());

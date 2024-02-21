@@ -9,7 +9,6 @@ use request_context::RequestContext;
 
 use hyper::{body, Request, Response};
 use crate::qkd_manager::QkdManager;
-use async_trait::async_trait;
 use http_body_util::Full;
 use hyper::body::Bytes;
 use rustls_pki_types::CertificateDer;
@@ -18,7 +17,6 @@ use rustls_pki_types::CertificateDer;
 /// Trait representing the routes of the server
 /// Implement this trait to create a new routing system
 /// Should be implemented by the struct that will be used as a router, for example at each version of the API
-#[async_trait]
 pub trait Routes {
     /// Function that handles the API request
     /// # Arguments
@@ -27,7 +25,7 @@ pub trait Routes {
     /// * `qkd_manager` - A clone of the QKD manager, to be used to access the QKD system
     /// # Returns
     /// A response to the request, in hyper format
-    async fn handle_request(req: Request<body::Incoming>, client_cert: Option<&CertificateDer>, qkd_manager: QkdManager) -> Result<Response<Full<Bytes>>, Infallible>;
+    fn handle_request(req: Request<body::Incoming>, client_cert: Option<&CertificateDer>, qkd_manager: QkdManager) -> impl std::future::Future<Output = Result<Response<Full<Bytes>>, Infallible>> + Send; // Replacement for async_trait since Rust 1.75
 }
 
 
