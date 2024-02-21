@@ -29,25 +29,30 @@ pub struct QkdManager {
     pub kme_id: KmeId,
     /// Shannon's entropy calculator for keys stored in the database
     shannon_entropy_calculator: Arc<Mutex<ShannonEntropyAccumulator>>,
+    /// KME's nickname if any (eg: Alice, Bob...)
+    pub nick_name: Option<String>,
 }
 
 impl QkdManager {
     /// Create a new QKD manager handler
     /// # Arguments
     /// * `sqlite_db_path` - The path to the SQLite database file, or ":memory:" to use an in-memory database
+    /// * `this_kme_id` - The ID of the KME this QKD manager belongs to
+    /// * `kme_nickname` - The nickname of the KME, if any (eg: `"Alice"`, `"Bob"`...)
     /// # Returns
     /// A new QKD manager handler
     /// # Notes
     /// This function spawns a new thread to handle the QKD manager
-    pub fn new(sqlite_db_path: &str, this_kme_id: KmeId) -> Self {
+    pub fn new(sqlite_db_path: &str, this_kme_id: KmeId, kme_nickname: &Option<String>) -> Self {
         // crossbeam_channel allows cloning the sender and receiver
         let (command_tx, command_rx) = crossbeam_channel::unbounded::<QkdManagerCommand>();
         let (response_tx, response_rx) = crossbeam_channel::unbounded::<QkdManagerResponse>();
         let sqlite_db_path = String::from(sqlite_db_path);
 
         // Spawn a new thread to handle the QKD manager
+        let nickname = kme_nickname.to_owned();
         thread::spawn(move || {
-            let mut key_handler = match key_handler::KeyHandler::new(&sqlite_db_path, command_rx, response_tx, this_kme_id) {
+            let mut key_handler = match key_handler::KeyHandler::new(&sqlite_db_path, command_rx, response_tx, this_kme_id, nickname.to_owned()) {
                 Ok(handler) => handler,
                 Err(_) => {
                     error!("Error creating key handler");
@@ -65,6 +70,7 @@ impl QkdManager {
             dir_watcher,
             kme_id: this_kme_id,
             shannon_entropy_calculator: Arc::new(Mutex::new(ShannonEntropyAccumulator::new())),
+            nick_name: kme_nickname.to_owned(),
         }
     }
 
@@ -435,7 +441,7 @@ mod test {
     #[tokio::test]
     async fn test_add_qkd_key() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
-        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &Some("Alice".to_string()));
         let key = super::PreInitQkdKeyWrapper::new(1, &[0; crate::QKD_KEY_SIZE_BYTES]).unwrap();
         let response = qkd_manager.add_pre_init_qkd_key(key);
         assert!(response.is_ok());
@@ -449,7 +455,7 @@ mod test {
         let first_key: QkdEncKey = <[u8; crate::QKD_KEY_SIZE_BYTES]>::try_from("ABCDEFGHIJKLMNOPQRSTUVWXYZ012345".as_bytes()).unwrap();
         let second_key: QkdEncKey = <[u8; crate::QKD_KEY_SIZE_BYTES]>::try_from("6789+-abcdefghijklmnopqrstuvwxyz".as_bytes()).unwrap();
 
-        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &Some("Alice".to_string()));
         let key = super::PreInitQkdKeyWrapper::new(1, &first_key).unwrap();
         qkd_manager.add_pre_init_qkd_key(key).unwrap();
         assert_eq!(qkd_manager.get_total_keys_shannon_entropy().await.unwrap(), 5.0);
@@ -461,7 +467,7 @@ mod test {
     #[test]
     fn test_add_sae() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
-        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &Some("Alice".to_string()));
         let response = qkd_manager.add_sae(1,  1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]));
         assert!(response.is_ok());
         assert_eq!(response.unwrap(), super::QkdManagerResponse::Ok);
@@ -491,7 +497,7 @@ mod test {
     #[serial]
     async fn test_get_qkd_key() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
-        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &Some("Alice".to_string()));
         qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         qkd_manager.add_sae(2, 2, &None).unwrap(); // No certificate as this SAE doesn't belong to KME1
         let key = super::PreInitQkdKeyWrapper::new(1, &[0; crate::QKD_KEY_SIZE_BYTES]).unwrap();
@@ -513,7 +519,7 @@ mod test {
     #[serial]
     async fn test_get_qkd_keys_with_ids() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
-        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &Some("Alice".to_string()));
         qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         qkd_manager.add_sae(2, 1, &Some(vec![1; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let key = super::PreInitQkdKeyWrapper::new(1,&[0; crate::QKD_KEY_SIZE_BYTES]).unwrap();
@@ -556,7 +562,7 @@ mod test {
     #[test]
     fn test_get_qkd_key_status() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
-        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &Some("Alice".to_string()));
         qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         qkd_manager.add_sae(2, 1, &Some(vec![1; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let key = super::PreInitQkdKeyWrapper::new(1, &[0; crate::QKD_KEY_SIZE_BYTES]).unwrap();
@@ -577,7 +583,7 @@ mod test {
     #[test]
     fn test_get_sae_info_from_client_auth_certificate() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
-        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &Some("Alice".to_string()));
         qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let response = qkd_manager.get_sae_info_from_client_auth_certificate(&vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]);
         assert!(response.is_ok());
@@ -594,7 +600,7 @@ mod test {
     #[test]
     fn test_get_kme_id_from_sae_id() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
-        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &Some("Alice".to_string()));
         qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let response = qkd_manager.get_kme_id_from_sae_id(1);
         assert!(response.is_some());
@@ -609,7 +615,7 @@ mod test {
     #[test]
     fn test_add_kme_classical_net_info() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
-        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &Some("Alice".to_string()));
 
         let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234;bad_addr", "certs/inter_kmes/client-kme1-to-kme2.pfx", "", true);
         assert!(response.is_err());
@@ -634,7 +640,7 @@ mod test {
 
     #[tokio::test]
     #[serial]
-    async fn test_add_important_event_subscriber() {
+    async fn test_add_important_event_subscriber_with_nickname() {
         struct TestImportantEventSubscriber {
             events: Mutex<Vec<String>>,
         }
@@ -652,7 +658,45 @@ mod test {
             }
         }
         const SQLITE_DB_PATH: &'static str = ":memory:";
-        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1);
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &Some("Alice".to_string()));
+        let subscriber = Arc::new(TestImportantEventSubscriber::new());
+        let response = qkd_manager.add_important_event_subscriber(Arc::clone(&subscriber) as Arc<dyn ImportantEventSubscriber>);
+        assert!(response.is_ok());
+        assert_eq!(subscriber.events.lock().unwrap().deref().len(), 0);
+
+        // Request a key
+        qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
+        let key = super::PreInitQkdKeyWrapper::new(1, &[0; crate::QKD_KEY_SIZE_BYTES]).unwrap();
+        qkd_manager.add_pre_init_qkd_key(key).unwrap();
+        let response = qkd_manager.get_qkd_key(1, &vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]).await;
+        assert!(response.is_ok());
+
+        assert_eq!(subscriber.events.lock().unwrap().deref().len(), 2);
+        assert_eq!(subscriber.events.lock().unwrap().deref_mut().pop(), Some("[Alice] Key 7b848ade-8cff-3d54-a9b8-53a215e6ee77 activated between SAEs 1 and 1".to_string()));
+        assert_eq!(subscriber.events.lock().unwrap().deref_mut().pop(), Some("[Alice] SAE 1 requested a key to communicate with 1".to_string()));
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_add_important_event_subscriber_without_nickname() {
+        struct TestImportantEventSubscriber {
+            events: Mutex<Vec<String>>,
+        }
+        impl TestImportantEventSubscriber {
+            fn new() -> Self {
+                Self {
+                    events: Mutex::new(Vec::new()),
+                }
+            }
+        }
+        impl ImportantEventSubscriber for TestImportantEventSubscriber {
+            fn notify(&self, message: &str) -> Result<(), Error> {
+                self.events.lock().unwrap().push(message.to_string());
+                Ok(())
+            }
+        }
+        const SQLITE_DB_PATH: &'static str = ":memory:";
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &None);
         let subscriber = Arc::new(TestImportantEventSubscriber::new());
         let response = qkd_manager.add_important_event_subscriber(Arc::clone(&subscriber) as Arc<dyn ImportantEventSubscriber>);
         assert!(response.is_ok());

@@ -27,9 +27,6 @@ async fn test_key_transfer_from_file_config() {
     const LOG_DEMO_REQUEST_URL_INDEX: &'static str = concatcp!("http://localhost:8080");
     const LOG_DEMO_REQUEST_URL_JSON_DATA: &'static str = concatcp!("http://localhost:8080/messages");
 
-    const LOG_MESSAGE_STEP_1: &'static str = "[]";
-    const LOG_MESSAGE_STEP_2: &'static str = "[\"[KME 1] SAE 1 requested a key to communicate with 3\",\"[KME 1] As SAE 3 belongs to KME 2, activating it through inter KMEs network\",\"[KME 1] Key 2ae3e385-4e51-7458-b1c1-69066a4cb6d7 activated between SAEs 1 and 3\"]";
-    const LOG_MESSAGE_STEP_3: &'static str = "[\"[KME 1] SAE 1 requested a key to communicate with 3\",\"[KME 1] As SAE 3 belongs to KME 2, activating it through inter KMEs network\",\"[KME 1] Key 2ae3e385-4e51-7458-b1c1-69066a4cb6d7 activated between SAEs 1 and 3\",\"[KME 1] Key 9768257a-1c59-d255-a93d-d4bb1b693651 activated between SAEs 3 and 1\",\"[KME 1] SAE 1 requested key 9768257a-1c59-d255-a93d-d4bb1b693651 (from 3)\"]";
 
     tokio::spawn(async move {
         launch_kme_from_config_file(CONFIG_FILE_PATH_KME1).await;
@@ -46,7 +43,7 @@ async fn test_key_transfer_from_file_config() {
     assert_eq!(log_index_response.status(), 200);
     let log_data_response = log_demo_reqwest_client.get(LOG_DEMO_REQUEST_URL_JSON_DATA).send().await.unwrap();
     assert_eq!(log_data_response.status(), 200);
-    assert_eq!(log_data_response.text().await.unwrap(), LOG_MESSAGE_STEP_1);
+    assert_eq!(log_data_response.text().await.unwrap(), "[]");
 
     let post_key_response = sae1_reqwest_client.post(INIT_POST_KEY_REQUEST_URL).send().await;
     assert!(post_key_response.is_ok());
@@ -57,7 +54,10 @@ async fn test_key_transfer_from_file_config() {
 
     let log_data_response = log_demo_reqwest_client.get(LOG_DEMO_REQUEST_URL_JSON_DATA).send().await.unwrap();
     assert_eq!(log_data_response.status(), 200);
-    assert_eq!(log_data_response.text().await.unwrap(), LOG_MESSAGE_STEP_2);
+    let text_log_message = log_data_response.text().await.unwrap();
+    assert!(text_log_message.contains("[Alice] SAE 1 requested a key to communicate with 3"));
+    assert!(text_log_message.contains("[Alice] As SAE 3 belongs to KME 2, activating it through inter KMEs network"));
+    assert!(text_log_message.contains("[Alice] Key 2ae3e385-4e51-7458-b1c1-69066a4cb6d7 activated between SAEs 1 and 3"));
 
     const REMOTE_DEC_KEYS_REQ_BODY: &'static str = "{\n\"key_IDs\": [{\"key_ID\": \"2ae3e385-4e51-7458-b1c1-69066a4cb6d7\"}]\n}";
     let req_key_remote_response = sae2_reqwest_client.post(REMOTE_DEC_KEYS_REQUEST_URL).header(CONTENT_TYPE, "application/json").body(REMOTE_DEC_KEYS_REQ_BODY).send().await;
@@ -84,7 +84,12 @@ async fn test_key_transfer_from_file_config() {
 
     let log_data_response = log_demo_reqwest_client.get(LOG_DEMO_REQUEST_URL_JSON_DATA).send().await.unwrap();
     assert_eq!(log_data_response.status(), 200);
-    assert_eq!(log_data_response.text().await.unwrap(), LOG_MESSAGE_STEP_3);
+    let text_log_message = log_data_response.text().await.unwrap();
+    assert!(text_log_message.contains("[Alice] SAE 1 requested a key to communicate with 3"));
+    assert!(text_log_message.contains("[Alice] As SAE 3 belongs to KME 2, activating it through inter KMEs network"));
+    assert!(text_log_message.contains("[Alice] Key 2ae3e385-4e51-7458-b1c1-69066a4cb6d7 activated between SAEs 1 and 3"));
+    assert!(text_log_message.contains("[Alice] Key 9768257a-1c59-d255-a93d-d4bb1b693651 activated between SAEs 3 and 1"));
+    assert!(text_log_message.contains("[Alice] SAE 1 requested key 9768257a-1c59-d255-a93d-d4bb1b693651 (from 3)"));
 }
 
 // Quite similar to program's main function

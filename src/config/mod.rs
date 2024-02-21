@@ -37,6 +37,8 @@ impl Config {
 pub struct ThisKmeConfig {
     /// ID of this KME, in the QKD network
     pub(crate) id: KmeId,
+    /// Optional nickname for this KME, used for debugging purposes (eg "Alice" or "Bob")
+    pub(crate) nickname: Option<String>,
     /// Path to SQLite database file, used to store keys, certificates and other data
     /// You can use `:memory:` to use in-memory database
     pub(crate) sqlite_db_path: String,
@@ -116,6 +118,7 @@ mod tests {
         let config = Config::from_json_path(JSON_CONFIG_PATH).unwrap();
         assert_eq!(config.this_kme_config.id, 1);
         assert_eq!(config.this_kme_config.sqlite_db_path, ":memory:");
+        assert_eq!(config.this_kme_config.nickname, Some("Alice".to_string()));
         assert_eq!(config.this_kme_config.key_directory_to_watch, "tests/data/raw_keys/kme-1-1");
         assert_eq!(config.this_kme_config.saes_https_interface.listen_address, "127.0.0.1:3000");
         assert_eq!(config.this_kme_config.saes_https_interface.ca_client_cert_path, "certs/zone1/CA-zone1.crt");

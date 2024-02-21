@@ -21,7 +21,7 @@ pub fn setup() {
         "certs/zone1/kme1.key",
     );
 
-    let qkd_manager = QkdManager::new(":memory:", 1);
+    let qkd_manager = QkdManager::new(":memory:", 1, &Some("Alice".to_string()));
     qkd_manager.add_sae(1,
                         1,
                         &Some(vec![0x70, 0xf4, 0x4f, 0x56, 0x0c, 0x3f, 0x27, 0xd4, 0xb2, 0x11, 0xa4, 0x78, 0x13, 0xaf, 0xd0, 0x3c, 0x03, 0x81, 0x3b, 0x8e])
@@ -110,7 +110,7 @@ pub fn setup_2_kmes_network() {
         "certs/zone2/kme2.key",
     );
 
-    let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1));
+    let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1, &Some("Alice".to_string())));
     kme1_qkd_manager.add_sae(1,
                              1,
                              &Some(vec![0x70, 0xf4, 0x4f, 0x56, 0x0c, 0x3f, 0x27, 0xd4, 0xb2, 0x11, 0xa4, 0x78, 0x13, 0xaf, 0xd0, 0x3c, 0x03, 0x81, 0x3b, 0x8e])
@@ -129,7 +129,7 @@ pub fn setup_2_kmes_network() {
         b"this_is_secret_key_2_of_32_bytes",
     ).unwrap()).unwrap();
 
-    let kme2_qkd_manager = Arc::new(QkdManager::new(":memory:", 2));
+    let kme2_qkd_manager = Arc::new(QkdManager::new(":memory:", 2, &Some("Bob".to_string())));
     kme2_qkd_manager.add_sae(1,
                              1,
                              &None
@@ -193,7 +193,7 @@ pub fn setup_2_kmes_network_keys_not_sync() {
         "certs/zone2/kme2.key",
     );
 
-    let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1));
+    let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1, &Some("Alice".to_string())));
     kme1_qkd_manager.add_sae(1,
                              1,
                              &Some(vec![0x70, 0xf4, 0x4f, 0x56, 0x0c, 0x3f, 0x27, 0xd4, 0xb2, 0x11, 0xa4, 0x78, 0x13, 0xaf, 0xd0, 0x3c, 0x03, 0x81, 0x3b, 0x8e])
@@ -208,7 +208,7 @@ pub fn setup_2_kmes_network_keys_not_sync() {
         b"this_is_secret_key_1_of_32_bytes",
     ).unwrap()).unwrap();
 
-    let kme2_qkd_manager = Arc::new(QkdManager::new(":memory:", 2));
+    let kme2_qkd_manager = Arc::new(QkdManager::new(":memory:", 2, &Some("Bob".to_string())));
     kme2_qkd_manager.add_sae(1,
                              1,
                              &None
@@ -256,7 +256,7 @@ pub fn setup_2_kmes_network_1_kme_down() {
         "certs/zone1/kme1.key",
     );
 
-    let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1));
+    let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1, &Some("Alice".to_string())));
     kme1_qkd_manager.add_sae(1,
                              1,
                              &Some(vec![0x70, 0xf4, 0x4f, 0x56, 0x0c, 0x3f, 0x27, 0xd4, 0xb2, 0x11, 0xa4, 0x78, 0x13, 0xaf, 0xd0, 0x3c, 0x03, 0x81, 0x3b, 0x8e])
@@ -302,7 +302,7 @@ pub fn setup_2_kmes_network_missing_conf() {
         "certs/zone1/kme1.key",
     );
 
-    let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1));
+    let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1, &Some("Alice".to_string())));
     kme1_qkd_manager.add_sae(1,
                              1,
                              &Some(vec![0x70, 0xf4, 0x4f, 0x56, 0x0c, 0x3f, 0x27, 0xd4, 0xb2, 0x11, 0xa4, 0x78, 0x13, 0xaf, 0xd0, 0x3c, 0x03, 0x81, 0x3b, 0x8e])

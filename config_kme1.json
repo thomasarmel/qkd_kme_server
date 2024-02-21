@@ -1,6 +1,7 @@
 {
   "this_kme": {
     "id": 1,
+    "nickname": "Alice",
     "sqlite_db_path": ":memory:",
     "key_directory_to_watch": "raw_keys/kme-1-1",
     "saes_https_interface": {

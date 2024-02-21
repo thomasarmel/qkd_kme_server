@@ -1,6 +1,8 @@
 //! HTTP server for logging important events, in a demonstration purpose (intended to be visited using a web browser)
 //! Events are displayed on index HTML page, and retrieved periodically by AJAX requests from /messages
 
+mod logging_message;
+
 use std::convert::Infallible;
 use std::io;
 use std::ops::Deref;
@@ -14,13 +16,14 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 use crate::event_subscription::ImportantEventSubscriber;
+use crate::server::log_http_server::logging_message::LoggingMessage;
 
 /// HTTP logging server struct
 #[derive(Debug)]
 pub struct LoggingHttpServer {
     /// HTTP listen address, e.g. "0.0.0.0:8080"
     pub listen_addr: String,
-    received_log_messages: Arc<Mutex<Vec<String>>>,
+    received_log_messages: Arc<Mutex<Vec<LoggingMessage>>>,
 }
 
 impl LoggingHttpServer {
@@ -35,8 +38,9 @@ impl LoggingHttpServer {
             received_log_messages: Arc::new(Mutex::new(Vec::new())),
         }
     }
-
     /// Run the HTTP server
+    /// # Arguments
+    /// * `qkd_manager` - The QKD manager associated with this logging server
     /// # Returns
     /// Never (`!`) in case of success, an io::Error otherwise
     pub async fn run(&self) -> Result<(), io::Error> {
@@ -64,7 +68,7 @@ impl LoggingHttpServer {
     }
 
     /// Called at each incoming request
-    async fn handle_incoming_request(request: Request<hyper::body::Incoming>, received_log_messages: Arc<Mutex<Vec<String>>>) -> Result<Response<Full<Bytes>>, Infallible> {
+    async fn handle_incoming_request(request: Request<hyper::body::Incoming>, received_log_messages: Arc<Mutex<Vec<LoggingMessage>>>) -> Result<Response<Full<Bytes>>, Infallible> {
         const INDEX_HTML_RESPONSE: &str = include_str!("index.html");
 
         let response_obj = match request.uri().path() {
@@ -79,7 +83,7 @@ impl LoggingHttpServer {
     }
 
     /// Generates JSON array HTTP response containing all received log messages, or HTTP error status if an error occurred
-    fn generate_messages_http_json_response(received_log_messages: &Arc<Mutex<Vec<String>>>) -> Response<Full<Bytes>> {
+    fn generate_messages_http_json_response(received_log_messages: &Arc<Mutex<Vec<LoggingMessage>>>) -> Response<Full<Bytes>> {
         let received_log_messages = match received_log_messages.lock() {
             Ok(received_log_messages) => received_log_messages,
             Err(_) => {
@@ -108,7 +112,7 @@ impl ImportantEventSubscriber for LoggingHttpServer {
             .map_err(|_|
                 io::Error::new(io::ErrorKind::Other, "Mutex lock error"
                 ))?
-            .push(message.to_string());
+            .push(LoggingMessage::new(message));
         Ok(())
     }
 }
@@ -116,6 +120,7 @@ impl ImportantEventSubscriber for LoggingHttpServer {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use regex::Regex;
     use serial_test::serial;
     use crate::event_subscription::ImportantEventSubscriber;
     use crate::server::log_http_server::LoggingHttpServer;
@@ -144,6 +149,7 @@ mod tests {
 
         let get_messages_response = reqwest::get("http://127.0.0.1:8080/messages").await.unwrap();
         assert_eq!(get_messages_response.status(), 200);
-        assert_eq!(get_messages_response.text().await.unwrap(), "[\"Hello\",\"World\"]");
+        let check_json_regex = Regex::new(r#"\[\{"message":"Hello","datetime":"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z"},\{"message":"World","datetime":"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z"}]"#).unwrap();
+        assert!(check_json_regex.is_match(&get_messages_response.text().await.unwrap()));
     }
 }

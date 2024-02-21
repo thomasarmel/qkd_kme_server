@@ -13,7 +13,7 @@ pub(super) struct ConfigExtractor {}
 
 impl ConfigExtractor {
     pub(super) fn extract_config_to_qkd_manager(config: &Config) -> Result<Arc<QkdManager>, io::Error> {
-        let qkd_manager = Arc::new(QkdManager::new(&config.this_kme_config.sqlite_db_path, config.this_kme_config.id));
+        let qkd_manager = Arc::new(QkdManager::new(&config.this_kme_config.sqlite_db_path, config.this_kme_config.id, &config.this_kme_config.nickname));
         Self::extract_all_saes(Arc::clone(&qkd_manager), config)?;
         Self::extract_other_kmes_and_keys(Arc::clone(&qkd_manager), config)?;
         Self::add_classical_net_routing_info_kmes(Arc::clone(&qkd_manager), config)?;
@@ -181,14 +181,14 @@ mod tests {
 
     #[test]
     fn test_extract_all_keys_from_dir() {
-        let qkd_manager = Arc::new(crate::qkd_manager::QkdManager::new(":memory:", 1));
+        let qkd_manager = Arc::new(crate::qkd_manager::QkdManager::new(":memory:", 1, &None));
         assert!(ConfigExtractor::extract_all_keys_from_dir(Arc::clone(&qkd_manager), "raw_keys/kme-1-1", 1).is_ok());
         assert!(ConfigExtractor::extract_all_keys_from_dir(qkd_manager, "unexisting/directory", 1).is_err());
     }
 
     #[test]
     fn test_extract_all_keys_from_file() {
-        let qkd_manager = Arc::new(crate::qkd_manager::QkdManager::new(":memory:", 1));
+        let qkd_manager = Arc::new(crate::qkd_manager::QkdManager::new(":memory:", 1, &None));
         assert!(ConfigExtractor::extract_all_keys_from_file(Arc::clone(&qkd_manager), "raw_keys/", 1).is_err());
         assert!(ConfigExtractor::extract_all_keys_from_file(Arc::clone(&qkd_manager), "path/to/unexisting/file", 1).is_err());
         assert!(ConfigExtractor::extract_all_keys_from_file(Arc::clone(&qkd_manager), "raw_keys/kme-1-1/211202_1159_CD6ADBF2.cor", 1).is_ok());
@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn test_extract_and_watch_raw_keys_dir() {
-        let qkd_manager = Arc::new(crate::qkd_manager::QkdManager::new(":memory:", 1));
+        let qkd_manager = Arc::new(crate::qkd_manager::QkdManager::new(":memory:", 1, &None));
         assert!(ConfigExtractor::extract_and_watch_raw_keys_dir(Arc::clone(&qkd_manager), 1, "raw_keys/kme-1-1").is_ok());
         assert!(ConfigExtractor::extract_and_watch_raw_keys_dir(Arc::clone(&qkd_manager), 1, "unexisting/directory").is_err());
     }

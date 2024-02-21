@@ -14,7 +14,7 @@
             .then(response => response.json())
             .then(events => {
                 eventList.innerHTML = events.map(event => {
-                    return `<p>${event}</p>`;
+                    return `<p>${event.datetime}: ${event.message}</p>`;
                 }).join('');
             });
     }, 500);

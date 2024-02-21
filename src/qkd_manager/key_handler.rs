@@ -28,6 +28,8 @@ pub(super) struct KeyHandler {
     qkd_router: router::QkdRouter,
     /// Subscribers to important events, for demonstration purpose
     event_notification_subscribers: Vec<Arc<dyn ImportantEventSubscriber>>,
+    /// Optional nickname for this KME, used for debugging purposes (eg "Alice" or "Bob")
+    nickname: Option<String>,
 }
 
 impl KeyHandler {
@@ -37,11 +39,13 @@ impl KeyHandler {
     /// * `sqlite_db_path` - The path to the sqlite database file, or ":memory:" to use an in-memory database
     /// * `command_rx` - The channel to receive commands from the QKD manager (main thread)
     /// * `response_tx` - The channel to send responses to the QKD manager (main thread)
+    /// * `this_kme_id` - The ID of this KME
+    /// * `kme_nickname` - The nickname of this KME, for debugging purposes
     /// # Returns
     /// A new key handler
     /// # Errors
     /// If the sqlite database cannot be opened or if the tables cannot be created
-    pub(super) fn new(sqlite_db_path: &str, command_rx: crossbeam_channel::Receiver<QkdManagerCommand>, response_tx: crossbeam_channel::Sender<QkdManagerResponse>, this_kme_id: KmeId) -> Result<Self, io::Error> {
+    pub(super) fn new(sqlite_db_path: &str, command_rx: crossbeam_channel::Receiver<QkdManagerCommand>, response_tx: crossbeam_channel::Sender<QkdManagerResponse>, this_kme_id: KmeId, kme_nickname: Option<String>) -> Result<Self, io::Error> {
         const DATABASE_INIT_REQ: &'static str = include_str!("init_qkd_database.sql");
 
         let key_handler = Self {
@@ -54,6 +58,7 @@ impl KeyHandler {
             this_kme_id,
             qkd_router: router::QkdRouter::new(),
             event_notification_subscribers: vec![],
+            nickname: kme_nickname,
         };
         // Create the tables if they do not exist
         key_handler.sqlite_db.execute(DATABASE_INIT_REQ).map_err(|e| {
@@ -275,7 +280,7 @@ impl KeyHandler {
         let origin_kme_id = self.this_kme_id;
         let target_kme_id = self.get_kme_id_from_sae_id(target_sae_id).ok_or(QkdManagerResponse::NotFound)?;
 
-        export_important_logging_message!(&self, &format!("[KME {}] SAE {} requested a key to communicate with {}", self.this_kme_id, origin_sae_id, target_sae_id));
+        export_important_logging_message!(&self, &format!("SAE {} requested a key to communicate with {}", origin_sae_id, target_sae_id));
 
         let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, FETCH_PREINIT_KEY_PREPARED_STATEMENT);
         stmt.bind((1, target_kme_id)).map_err(|_| {
@@ -312,7 +317,7 @@ impl KeyHandler {
                 error!("Error activating key on other KME");
                 qkd_manager_activation_error
             })?;
-            export_important_logging_message!(&self, &format!("[KME {}] As SAE {} belongs to KME {}, activating it through inter KMEs network", self.this_kme_id, target_sae_id, target_kme_id));
+            export_important_logging_message!(&self, &format!("As SAE {} belongs to KME {}, activating it through inter KMEs network", target_sae_id, target_kme_id));
         }
 
         self.delete_pre_init_key_with_id(id).map_err(|_| {
@@ -463,7 +468,7 @@ impl KeyHandler {
             error!("Error executing SQL statement");
             QkdManagerResponse::Ko
         })?;
-        export_important_logging_message!(&self, &format!("[KME {}] Key {} activated between SAEs {} and {}", self.this_kme_id, key_uuid, origin_sae_id, target_sae_id));
+        export_important_logging_message!(&self, &format!("Key {} activated between SAEs {} and {}", key_uuid, origin_sae_id, target_sae_id));
         Ok(QkdManagerResponse::Ok)
     }
 
@@ -532,7 +537,7 @@ impl KeyHandler {
                 QkdManagerResponse::Ko
             })?;
 
-            export_important_logging_message!(&self, &format!("[KME {}] SAE {} requested key {} (from {})", self.this_kme_id, current_sae_id, key_uuid, origin_sae_id));
+            export_important_logging_message!(&self, &format!("SAE {} requested key {} (from {})", current_sae_id, key_uuid, origin_sae_id));
 
             // Encode the key in base64
             Ok(ResponseQkdKey {
@@ -669,9 +674,14 @@ macro_rules! ensure_prepared_statement_ok {
 #[macro_export]
 macro_rules! export_important_logging_message {
     ($key_handler_reference:expr, $message:expr) => {
+        let displayed_producer = match $key_handler_reference.nickname {
+            Some(ref nickname) => nickname.to_owned(),
+            None => std::string::String::from(&format!("KME {}", $key_handler_reference.this_kme_id)),
+        };
+        let message = &format!("[{}] {}", displayed_producer, $message);
         info!("{}", $message);
         for subscriber in $key_handler_reference.event_notification_subscribers.iter() {
-            let _ = subscriber.notify($message); // We ignore the result here
+            let _ = subscriber.notify(message); // We ignore the result here
         }
     }
 }
@@ -709,7 +719,7 @@ mod tests {
     fn test_get_sae_id_from_certificate() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, None).unwrap();
         let sae_id = 1;
         let kme_id = 1;
         let sae_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
@@ -724,7 +734,7 @@ mod tests {
     fn test_add_preinit_key() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, None).unwrap();
         let key = crate::qkd_manager::PreInitQkdKeyWrapper {
             other_kme_id: 1,
             key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
@@ -737,7 +747,7 @@ mod tests {
     fn test_get_sae_status() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, None).unwrap();
         let sae_id = 1;
         let sae_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
         key_handler.add_sae(sae_id, 1, &Some(sae_certificate_serial.clone())).unwrap();
@@ -795,7 +805,7 @@ mod tests {
     fn test_get_sae_keys() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, None).unwrap();
         let sae_id = 1;
         let kme_id = 1;
         let sae_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
@@ -857,7 +867,7 @@ mod tests {
     fn test_get_sae_keys_with_ids() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, None).unwrap();
         let sae_id = 1;
         let kme_id = 1;
         let sae_1_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
@@ -902,7 +912,7 @@ mod tests {
     fn test_get_kme_id_from_sae() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, None).unwrap();
         let sae_id = 1;
         let kme_id = 1;
         let sae_1_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
@@ -917,7 +927,7 @@ mod tests {
     fn test_get_sae_infos_from_certificate() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, None).unwrap();
         let sae_id = 1;
         let kme_id = 1;
 
@@ -938,7 +948,7 @@ mod tests {
     fn test_delete_pre_init_key_with_id() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, None).unwrap();
         let key = crate::qkd_manager::PreInitQkdKeyWrapper {
             other_kme_id: 1,
             key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
@@ -950,10 +960,10 @@ mod tests {
     }
 
     #[test]
-    fn test_add_important_event_subscriber() {
+    fn test_add_important_event_subscriber_without_nickname() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
-        let mut key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let mut key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, None).unwrap();
 
         let subscriber = Arc::new(TestImportantEventSubscriber::new());
         let subscriber2 = Arc::new(TestImportantEventSubscriber::new());
@@ -982,10 +992,42 @@ mod tests {
     }
 
     #[test]
+    fn test_add_important_event_subscriber_with_nickname() {
+        let (_, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, _) = crossbeam_channel::unbounded();
+        let mut key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, Some("Alice".to_string())).unwrap();
+
+        let subscriber = Arc::new(TestImportantEventSubscriber::new());
+        let subscriber2 = Arc::new(TestImportantEventSubscriber::new());
+
+        key_handler.event_notification_subscribers.push(Arc::clone(&subscriber) as Arc<dyn ImportantEventSubscriber>);
+        key_handler.event_notification_subscribers.push(Arc::clone(&subscriber2) as Arc<dyn ImportantEventSubscriber>);
+        assert_eq!(key_handler.event_notification_subscribers.len(), 2);
+        assert_eq!(subscriber.events.lock().unwrap().len(), 0);
+        assert_eq!(subscriber2.events.lock().unwrap().len(), 0);
+
+        let sae_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
+        key_handler.add_sae(1, 1, &Some(sae_certificate_serial.clone())).unwrap();
+        key_handler.add_preinit_qkd_key(crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
+            key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
+            key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
+        }).unwrap();
+        key_handler.get_sae_keys(&sae_certificate_serial, 1).unwrap();
+
+        assert_eq!(subscriber.events.lock().unwrap().len(), 2);
+        assert_eq!(subscriber2.events.lock().unwrap().len(), 2);
+        assert_eq!(subscriber.events.lock().unwrap()[0], "[Alice] SAE 1 requested a key to communicate with 1");
+        assert_eq!(subscriber.events.lock().unwrap()[1], "[Alice] Key 00000000-0000-0000-0000-000000000000 activated between SAEs 1 and 1");
+        assert_eq!(subscriber2.events.lock().unwrap()[0], "[Alice] SAE 1 requested a key to communicate with 1");
+        assert_eq!(subscriber2.events.lock().unwrap()[1], "[Alice] Key 00000000-0000-0000-0000-000000000000 activated between SAEs 1 and 1");
+    }
+
+    #[test]
     fn test_run() {
         let (command_tx, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, response_rx) = crossbeam_channel::unbounded();
-        let mut key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1).unwrap();
+        let mut key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, Some("Alice".to_string())).unwrap();
 
         let subscriber = Arc::new(TestImportantEventSubscriber::new());
         key_handler.event_notification_subscribers.push(Arc::clone(&subscriber) as Arc<dyn ImportantEventSubscriber>);
@@ -1020,7 +1062,7 @@ mod tests {
         assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
 
         assert_eq!(subscriber.events.lock().unwrap().len(), 1);
-        assert_eq!(subscriber.events.lock().unwrap()[0], "[KME 1] SAE 1 requested a key to communicate with 1");
+        assert_eq!(subscriber.events.lock().unwrap()[0], "[Alice] SAE 1 requested a key to communicate with 1");
 
         command_tx.send(super::QkdManagerCommand::GetStatus(sae_certificate_serial.clone(), 2)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
