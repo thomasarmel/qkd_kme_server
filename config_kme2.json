@@ -4,13 +4,13 @@
     "sqlite_db_path": ":memory:",
     "key_directory_to_watch": "raw_keys/kme-2-2",
     "saes_https_interface": {
-      "listen_address": "127.0.0.1:4000",
+      "listen_address": "0.0.0.0:14000",
       "ca_client_cert_path": "certs/zone2/CA-zone2.crt",
       "server_cert_path": "certs/zone2/kme2.crt",
       "server_key_path": "certs/zone2/kme2.key"
     },
     "kmes_https_interface": {
-      "listen_address": "0.0.0.0:4001",
+      "listen_address": "0.0.0.0:14001",
       "ca_client_cert_path": "certs/inter_kmes/root-ca-kme2.crt",
       "server_cert_path": "certs/zone2/kme2.crt",
       "server_key_path": "certs/zone2/kme2.key"
@@ -20,7 +20,7 @@
     {
       "id": 1,
       "key_directory_to_watch": "raw_keys/kme-1-2",
-      "inter_kme_bind_address": "127.0.0.1:3001",
+      "inter_kme_bind_address": "127.0.0.1:13001",
       "ignore_system_proxy_settings": true,
       "https_client_authentication_certificate": "certs/inter_kmes/client-kme2-to-kme1.pfx",
       "https_client_authentication_certificate_password": ""
