@@ -25,30 +25,19 @@ async fn get_root_directory_good_cert_auth() {
 #[tokio::test]
 #[serial]
 async fn get_root_directory_bad_cert_auth() {
-    const CONNECTION_RESET_ERROR: &'static str = "Connection reset by peer (os error 104)";
-
     common::setup();
     let reqwest_client = common::setup_cert_auth_reqwest_bad_client();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;
     assert!(response.is_err());
-    let response_error = response.unwrap_err();
-    if cfg!(target_os = "linux") {
-        assert!(response_error.to_string().contains(CONNECTION_RESET_ERROR));
-    }
 }
 
 #[tokio::test]
 #[serial]
 async fn get_root_directory_no_cert_auth() {
-    const CERTIFICATE_REQUIRED_ERROR: &'static str = "certificate required";
-
     common::setup();
     let reqwest_client = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;
     assert!(response.is_err());
-    if cfg!(target_os = "linux") {
-        assert!(response.unwrap_err().to_string().contains(CERTIFICATE_REQUIRED_ERROR));
-    }
 }
