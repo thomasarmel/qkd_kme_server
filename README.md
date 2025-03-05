@@ -1,4 +1,4 @@
-# ETSI-compliant Quantum Key Distribution Key (QKD) Management Entity server
+# ETSI-compliant Quantum Key Distribution (QKD) Key Management Entity server
 
 *The following repository contains an implementation proposal for the KME (Key Management Entity) server defined in the [ETSI QKD standard](docs/etsi_qkd_standard_definition.pdf) for Quantum Key Distribution.*
 
