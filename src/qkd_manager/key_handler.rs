@@ -1025,6 +1025,11 @@ mod tests {
 
     #[test]
     fn test_run() {
+        #[cfg(not(target_os = "macos"))]
+        const KME1_TO_KME2_CLIENT_AUTH_CERT_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pfx";
+        #[cfg(target_os = "macos")]
+        const KME1_TO_KME2_CLIENT_AUTH_CERT_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pem";
+
         let (command_tx, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, response_rx) = crossbeam_channel::unbounded();
         let mut key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, Some("Alice".to_string())).unwrap();
@@ -1108,7 +1113,7 @@ mod tests {
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Ko));
         command_tx.send(super::QkdManagerCommand::AddKmeClassicalNetInfo(kme_id,
                                                                          String::from("test.fr:1234"),
-                                                                         String::from("certs/inter_kmes/client-kme1-to-kme2.pfx"),
+                                                                         String::from(KME1_TO_KME2_CLIENT_AUTH_CERT_PATH),
                                                                          String::from(""),
                                                                          true)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();

@@ -615,9 +615,15 @@ mod test {
     #[test]
     fn test_add_kme_classical_net_info() {
         const SQLITE_DB_PATH: &'static str = ":memory:";
+
+        #[cfg(not(target_os = "macos"))]
+        const KME1_TO_KME2_CLIENT_AUTH_CERT_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pfx";
+        #[cfg(target_os = "macos")]
+        const KME1_TO_KME2_CLIENT_AUTH_CERT_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pem";
+
         let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &Some("Alice".to_string()));
 
-        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234;bad_addr", "certs/inter_kmes/client-kme1-to-kme2.pfx", "", true);
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234;bad_addr", KME1_TO_KME2_CLIENT_AUTH_CERT_PATH, "", true);
         assert!(response.is_err());
         assert_eq!(response.err().unwrap(), super::QkdManagerResponse::Ko);
 
@@ -625,15 +631,18 @@ mod test {
         assert!(response.is_err());
         assert_eq!(response.err().unwrap(), super::QkdManagerResponse::Ko);
 
+        #[cfg(not(target_os = "macos"))]
+        {
         let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "certs/inter_kmes/client-kme1-to-kme2.pfx", "bad_password", true);
         assert!(response.is_err());
         assert_eq!(response.err().unwrap(), super::QkdManagerResponse::Ko);
+        }
 
         let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "tests/data/bad_certs/invalid_client_cert_data.pfx", "", true);
         assert!(response.is_err());
         assert_eq!(response.err().unwrap(), super::QkdManagerResponse::Ko);
 
-        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "certs/inter_kmes/client-kme1-to-kme2.pfx", "", true);
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", KME1_TO_KME2_CLIENT_AUTH_CERT_PATH, "", true);
         assert!(response.is_ok());
         assert_eq!(response.unwrap(), super::QkdManagerResponse::Ok);
     }

@@ -80,8 +80,9 @@ pub(super) struct KmeInfoClassicalNetwork {
 mod tests {
     use crate::qkd_manager::router::QkdRouter;
 
+    #[cfg(not(target_os = "macos"))] // pfx certificate issue on MacOS
     #[test]
-    fn test_add_kme_to_ip_or_domain_association() {
+    fn test_add_kme_to_ip_or_domain_association_pfx_cert() {
         let mut qkd_router = QkdRouter::new();
         let kme_id = 1;
         let ip_domain_port = "test.fr:1234";

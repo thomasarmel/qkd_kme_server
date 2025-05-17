@@ -164,7 +164,12 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_extract_config_to_qkd_manager() {
-        let config = Config::from_json_path("tests/data/test_kme_config.json").unwrap();
+        #[cfg(not(target_os = "macos"))]
+        const CONFIG_PATH: &'static str = "tests/data/test_kme_config.json";
+        #[cfg(target_os = "macos")]
+        const CONFIG_PATH: &'static str = "tests/data/test_kme_config_macos.json";
+
+        let config = Config::from_json_path(CONFIG_PATH).unwrap();
         let qkd_manager = ConfigExtractor::extract_config_to_qkd_manager(&config).unwrap();
         assert_eq!(qkd_manager.kme_id, 1);
         assert!(qkd_manager.get_qkd_key(2, &vec![0x70, 0xF4, 0x4F, 0x56, 0x0C, 0x3F, 0x27, 0xD4, 0xB2, 0x11, 0xA4, 0x78, 0x13, 0xAF, 0xD0, 0x3C, 0x03, 0x81, 0x3B, 0x8E]).await.is_ok());
