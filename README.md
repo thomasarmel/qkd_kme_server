@@ -445,4 +445,4 @@ Please check the file [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues
 
 # Contributing
 
-All contributions are welcome! Please check the [CONTRIBUTING](CONTRIBUTING) file for more information.
+All contributions are welcome! Please check the [CONTRIBUTING.md](CONTRIBUTING.md) file for more information.
