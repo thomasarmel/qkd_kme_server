@@ -6,6 +6,7 @@ use std::io;
 use std::io::Read;
 use crate::{io_err, KmeId};
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum AuthCertificateType {
     Pfx,
     Pem,
@@ -23,7 +24,7 @@ impl QkdRouter {
         }
     }
 
-    pub(super) fn add_kme_to_ip_domain_port_association(&mut self, kme_id: KmeId, ip_or_domain: &str, client_cert_path: &str, client_cert_password: &str, should_ignore_system_proxy_settings: bool) -> Result<(), io::Error> {
+    pub(super) fn add_kme_to_ip_domain_port_association(&mut self, kme_id: KmeId, ip_or_domain: &str, client_cert_path: &str, _client_cert_password: &str, should_ignore_system_proxy_settings: bool) -> Result<(), io::Error> {
         if !Self::check_ip_port_domain_url_validity(ip_or_domain) {
             return Err(io_err("Invalid IP, domain and port"));
         }
@@ -42,15 +43,29 @@ impl QkdRouter {
             },
         };
 
+        #[cfg(not(target_os = "macos"))]
+        if client_certificate_type != AuthCertificateType::Pfx {
+            return Err(io_err("Only pfx certificates are supported on this architecture"));
+        }
+
+        #[cfg(target_os = "macos")]
+        if client_certificate_type != AuthCertificateType::Pem {
+            return Err(io_err("Only pem certificates are supported on this architecture"));
+        }
+
         let mut buf = Vec::new();
         File::open(client_cert_path)
             .map_err(|e| io_err(&format!("Cannot open client certificate file: {:?}", e)))?
             .read_to_end(&mut buf)
             .map_err(|e| io_err(&format!("Cannot read client certificate file: {:?}", e)))?;
-        let tls_client_cert_identity = match client_certificate_type {
-            AuthCertificateType::Pfx => reqwest::tls::Identity::from_pkcs12_der(&buf, client_cert_password),
-            AuthCertificateType::Pem => reqwest::tls::Identity::from_pem(&buf)
-        }.map_err(|e| io_err(&format!("Cannot create client certificate identity: {:?}", e)))?;
+
+        #[cfg(not(target_os = "macos"))]
+        let tls_client_cert_identity = reqwest::tls::Identity::from_pkcs12_der(&buf, _client_cert_password)
+            .map_err(|e| io_err(&format!("Cannot create client certificate identity: {:?}", e)))?;
+        #[cfg(target_os = "macos")]
+        let tls_client_cert_identity = reqwest::tls::Identity::from_pem(&buf)
+            .map_err(|e| io_err(&format!("Cannot create client certificate identity: {:?}", e)))?;
+
         self.kme_to_classical_network_info_associations.insert(kme_id, KmeInfoClassicalNetwork {
             ip_domain_port: ip_or_domain.to_string(),
             tls_client_cert_identity,
@@ -94,6 +109,7 @@ mod tests {
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_some());
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn test_add_kme_to_ip_or_domain_association_pem_cert() {
         let mut qkd_router = QkdRouter::new();
@@ -139,8 +155,9 @@ mod tests {
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
-    fn test_add_kme_to_ip_or_domain_association_cert_file_invalid() {
+    fn test_add_kme_to_ip_or_domain_association_cert_file_invalid_pfx() {
         let mut qkd_router = QkdRouter::new();
         let kme_id = 1;
         let ip_domain_port = "test.fr:1234";
@@ -154,6 +171,23 @@ mod tests {
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_add_kme_to_ip_or_domain_association_cert_file_invalid_pem() {
+        let mut qkd_router = QkdRouter::new();
+        let kme_id = 1;
+        let ip_domain_port = "test.fr:1234";
+        let client_cert_path = "tests/data/bad_certs/invalid_client_cert_data.pem";
+        let client_cert_password = "";
+
+        assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
+        let qkd_router_add_result = qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password, true);
+        assert!(qkd_router_add_result.is_err());
+        assert!(qkd_router_add_result.err().unwrap().to_string().starts_with("Cannot create client certificate identity: "));
+        assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
+    }
+
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn test_add_kme_to_ip_or_domain_association_wrong_cert_password() {
         let mut qkd_router = QkdRouter::new();
