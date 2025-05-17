@@ -19,7 +19,8 @@ to facilitate integration with as many DBMSs as possible, it must be possible to
 The program must be able to be launched with a few command lines from 
 [officially supported platforms](README.md#supported-platforms). A non-expert must be able to launch the 
 project with just a few command lines (`git clone`, `cd`, `cargo run 
---release`).
+--release`). The code must run on operating system versions still supported 
+by the publisher (no need to support Windows XP, for example). It is assumed that the user is using the latest version of the compiler.
 
 ### Contributions addressing a specific need
 
@@ -39,6 +40,13 @@ The code must remain readable and well-documented. All changes must be unit test
 Removing compiler directives (such as `#![forbid(unsafe_code)]` or `#![deny
 (missing_docs)]`) to validate a pull request is prohibited. Removing targets 
 in the GitHub actions workflow is also prohibited: the code must compile and work on all [officially supported platforms](README.md#supported-platforms).
+
+### Adding New Dependencies
+
+It's best to limit the addition of new dependencies. However, if your 
+contribution absolutely requires new dependencies, then we recommend using 
+**pure-rust crates**, which are more likely to compile the first time on a 
+different machine. It will also be easier to offer a static binary, without dependency on shared libraries.
 
 ---
 
