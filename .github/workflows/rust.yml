@@ -22,6 +22,22 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v3
+      - name: disable-defender-monitoring
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Set-MpPreference -DisableIOAVProtection $true
+          Set-MpPreference -DisableBehaviorMonitoring $true
+          Set-MpPreference -DisableBlockAtFirstSeen $true
+          Set-MpPreference -DisableIntrusionPreventionSystem $true
+        shell: powershell
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
       - name: Build
         run: cargo build --verbose
       - name: Run tests
