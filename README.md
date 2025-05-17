@@ -401,3 +401,7 @@ Events displayed look like:
 
 2024-02-26T08:56:01.690332800Z: [Bob] Key b7a86bdd-c342-5b5f-b10c-c957cb1d8e75 activated between SAEs 2 and 1
 ```
+
+# Troubleshooting
+
+Please check the file [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues / FAQ.
