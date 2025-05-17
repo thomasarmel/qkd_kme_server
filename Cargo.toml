@@ -27,7 +27,7 @@ rustls-pemfile = "2.2"
 log = "0.4"
 simple_logger = "5.0"
 notify = "8.0"
-reqwest = { version = "0.12" , features = ["native-tls", "blocking", "json"] }
+reqwest = { version = "0.12" , features = ["native-tls", "rustls-tls", "blocking", "json"] }
 url = "2.5"
 chrono = "0.4"
 

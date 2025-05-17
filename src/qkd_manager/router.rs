@@ -6,6 +6,11 @@ use std::io;
 use std::io::Read;
 use crate::{io_err, KmeId};
 
+enum AuthCertificateType {
+    Pfx,
+    Pem,
+}
+
 #[derive(Clone)]
 pub(super) struct QkdRouter {
     kme_to_classical_network_info_associations: HashMap<KmeId, KmeInfoClassicalNetwork>,
@@ -22,13 +27,30 @@ impl QkdRouter {
         if !Self::check_ip_port_domain_url_validity(ip_or_domain) {
             return Err(io_err("Invalid IP, domain and port"));
         }
+
+        let client_certificate_path = std::path::Path::new(client_cert_path);
+        let client_certificate_type = match client_certificate_path.extension() {
+            None => {
+                return Err(io_err("Client certificate file has no extension"));
+            },
+            Some(os_str) => match os_str.to_str() {
+                Some("pfx") => AuthCertificateType::Pfx,
+                Some("pem") => AuthCertificateType::Pem,
+                _ => {
+                    return Err(io_err("Client certificate file has an invalid extension (expected pem or pfx)"));
+                }
+            },
+        };
+
         let mut buf = Vec::new();
         File::open(client_cert_path)
             .map_err(|e| io_err(&format!("Cannot open client certificate file: {:?}", e)))?
             .read_to_end(&mut buf)
             .map_err(|e| io_err(&format!("Cannot read client certificate file: {:?}", e)))?;
-        let tls_client_cert_identity = reqwest::tls::Identity::from_pkcs12_der(&buf, client_cert_password)
-            .map_err(|e| io_err(&format!("Cannot create client certificate identity: {:?}", e)))?;
+        let tls_client_cert_identity = match client_certificate_type {
+            AuthCertificateType::Pfx => reqwest::tls::Identity::from_pkcs12_der(&buf, client_cert_password),
+            AuthCertificateType::Pem => reqwest::tls::Identity::from_pem(&buf)
+        }.map_err(|e| io_err(&format!("Cannot create client certificate identity: {:?}", e)))?;
         self.kme_to_classical_network_info_associations.insert(kme_id, KmeInfoClassicalNetwork {
             ip_domain_port: ip_or_domain.to_string(),
             tls_client_cert_identity,
@@ -64,6 +86,19 @@ mod tests {
         let kme_id = 1;
         let ip_domain_port = "test.fr:1234";
         let client_cert_path = "certs/inter_kmes/client-kme1-to-kme2.pfx";
+        let client_cert_password = "";
+
+        assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
+        assert!(qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password, true).is_ok());
+        assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_some());
+    }
+
+    #[test]
+    fn test_add_kme_to_ip_or_domain_association_pem_cert() {
+        let mut qkd_router = QkdRouter::new();
+        let kme_id = 1;
+        let ip_domain_port = "test.fr:1234";
+        let client_cert_path = "certs/inter_kmes/client-kme1-to-kme2.pem";
         let client_cert_password = "";
 
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());

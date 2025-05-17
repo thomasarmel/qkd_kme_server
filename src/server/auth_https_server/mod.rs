@@ -63,6 +63,7 @@ impl<T: crate::routes::Routes> AuthHttpsServer<T> {
     /// # Returns
     /// A new AuthHttpsServer
     pub fn new(listen_addr: &str, ca_client_cert_path: &str, server_cert_path: &str, server_key_path: &str) -> AuthHttpsServer<T> {
+        let _ = rustls::crypto::ring::default_provider().install_default();
         AuthHttpsServer {
             phantom: PhantomData,
             listen_addr: listen_addr.to_string(),
