@@ -45,12 +45,12 @@ impl QkdRouter {
 
         #[cfg(not(target_os = "macos"))]
         if client_certificate_type != AuthCertificateType::Pfx {
-            return Err(io_err("Only pfx certificates are supported on this architecture"));
+            return Err(io_err("Only pfx certificates are supported on this platform"));
         }
 
         #[cfg(target_os = "macos")]
         if client_certificate_type != AuthCertificateType::Pem {
-            return Err(io_err("Only pem certificates are supported on this architecture"));
+            return Err(io_err("Only pem certificates are supported on this platform"));
         }
 
         let mut buf = Vec::new();

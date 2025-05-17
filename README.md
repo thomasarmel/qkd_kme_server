@@ -56,6 +56,26 @@ For now read QKD keys are stored inside a SQLite database, either in memory or o
 
 ## Getting started
 
+### Supported platforms
+
+- :white_check_mark: : Guaranteed to work, as the tests are run on this platform.
+- :negative_squared_cross_mark: Tested regularly, but not guaranteed to work.
+- :interrobang: Should work, but not tested.
+
+| Platform                       | Status                        |
+|--------------------------------|-------------------------------|
+| Linux Ubuntu 24.04 x86_64      | :white_check_mark:            |
+| Windows Server 2022 x86_64     | :white_check_mark:            |
+| MacOS 14 arm64                 | :white_check_mark:            |
+| Windows 11 Professional x86_64 | :negative_squared_cross_mark: |
+| FreeBSD 14 x86_64              | :negative_squared_cross_mark: |
+| All other computer platforms   | :interrobang:                 |
+
+
+**Note:** On MacOS, you need to use `pem` certificates instead of `pfx` certificates, as explained below.
+
+If you encounter any issue on a platform, please check the [TROUBLESHOOTING.md](TROUBLESHOOTING.md) file. If you still have an issue, please open an issue on GitHub.
+
 ### Compilation
 
 Install Rust programming language, as explained at https://www.rust-lang.org/tools/install.
@@ -172,6 +192,23 @@ openssl pkcs12 -export -out kmeb_client_external.pfx -inkey kmeb_client_external
 Here is a scheme of the expected certificates for a KME:
 
 ![Expected certificates for a KME](assets/certificates_final_scheme.png "Expected certificates for a KME").
+
+:warning: :apple: `pkcs12` format is not supported on MacOS. You should use `pem` format instead.
+
+To convert the `.pfx` file to `.pem`, you can use the following command:
+
+```bash
+openssl pkcs12 -in certificate.pfx -clcerts -nokeys -out cert.pem
+openssl pkcs12 -in certificate.pfx -nocerts -out key_enc.pem
+openssl rsa -in key_enc.pem -out key.pem
+cat cert.pem key.pem > test.pem
+```
+
+Enter password for the `.pfx` file when prompted. This will create a `.pem` file containing the client certificate and private key, use it in your config.
+
+Be aware that the `.pem` file will not be encrypted, so make sure to set the correct permissions on it.
+
+Then replace the `other_kmes/https_client_authentication_certificate` field in your config with the path to the `.pem` file you just created. You can set an empty password for the `other_kmes/https_client_authentication_certificate_password` field.
 
 #### Starting the server
 
@@ -405,3 +442,7 @@ Events displayed look like:
 # Troubleshooting
 
 Please check the file [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues / FAQ.
+
+# Contributing
+
+All contributions are welcome! Please check the [CONTRIBUTING](CONTRIBUTING) file for more information.
