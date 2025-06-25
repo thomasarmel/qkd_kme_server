@@ -446,3 +446,24 @@ Please check the file [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues
 # Contributing
 
 All contributions are welcome! Please check the [CONTRIBUTING.md](CONTRIBUTING.md) file for more information.
+
+# Citation
+
+Prévost, T., Martin, B. and Alibart, O. (2025). An ETSI GS QKD Compliant TLS Implementation. In Proceedings of the 22nd International Conference on Security and Cryptography - SECRYPT; ISBN 978-989-758-760-3; ISSN 2184-7711, SciTePress, pages 705-710. DOI: 10.5220/0013564700003979
+
+### Bibtex entry:
+```
+@conference{secrypt25,
+author={Thomas Prévost and Bruno Martin and Olivier Alibart},
+title={An ETSI GS QKD Compliant TLS Implementation},
+booktitle={Proceedings of the 22nd International Conference on Security and Cryptography - SECRYPT},
+year={2025},
+pages={705-710},
+publisher={SciTePress},
+organization={INSTICC},
+doi={10.5220/0013564700003979},
+isbn={978-989-758-760-3},
+issn={2184-7711},
+}
+
+```
