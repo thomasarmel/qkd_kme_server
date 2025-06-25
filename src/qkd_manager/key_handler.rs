@@ -253,6 +253,7 @@ impl KeyHandler {
         })?;
 
         let source_kme_id = self.this_kme_id; // This KME
+        let stored_key_count = std::cmp::min(key_count as usize, crate::MAX_QKD_KEYS_PER_SAE);
 
         // Create key exchange status response object
         let response_qkd_key_status = qkd_manager::http_response_obj::ResponseQkdKeysStatus {
@@ -261,7 +262,7 @@ impl KeyHandler {
             master_SAE_ID: origin_sae_id.to_string(),
             slave_SAE_ID: target_sae_id.to_string(),
             key_size: crate::QKD_KEY_SIZE_BITS,
-            stored_key_count: key_count as usize,
+            stored_key_count,
             max_key_count: crate::MAX_QKD_KEYS_PER_SAE,
             max_key_per_request: crate::MAX_QKD_KEYS_PER_REQUEST,
             max_key_size: crate::QKD_MAX_KEY_SIZE_BITS,
