@@ -18,13 +18,13 @@ async fn test_key_transfer_from_file_config() {
     std::env::set_var(qkd_kme_server::DANGER_IGNORE_CERTS_INTER_KME_NETWORK_ENV_VARIABLE, qkd_kme_server::ACTIVATED_ENV_VARIABLE_VALUE);
 
     #[cfg(not(target_os = "macos"))]
-    const CONFIG_FILE_PATH_KME1: &'static str = "tests/data/test_kme_config.json";
+    const CONFIG_FILE_PATH_KME1: &'static str = "tests/data/test_kme_config.json5";
     #[cfg(target_os = "macos")]
-    const CONFIG_FILE_PATH_KME1: &'static str = "tests/data/test_kme_config_macos.json";
+    const CONFIG_FILE_PATH_KME1: &'static str = "tests/data/test_kme_config_macos.json5";
     #[cfg(not(target_os = "macos"))]
-    const CONFIG_FILE_PATH_KME2: &'static str = "tests/data/test_kme2_config.json";
+    const CONFIG_FILE_PATH_KME2: &'static str = "tests/data/test_kme2_config.json5";
     #[cfg(target_os = "macos")]
-    const CONFIG_FILE_PATH_KME2: &'static str = "tests/data/test_kme2_config_macos.json";
+    const CONFIG_FILE_PATH_KME2: &'static str = "tests/data/test_kme2_config_macos.json5";
 
     const INIT_POST_KEY_REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/3/enc_keys");
     const INIT_POST_KEY_REQUEST_URL_2: &'static str = concatcp!("https://", common::REMOTE_KME_HOST_PORT ,"/api/v1/keys/1/enc_keys");

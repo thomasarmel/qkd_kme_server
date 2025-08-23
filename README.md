@@ -97,7 +97,9 @@ You run unit tests with:
 cargo test
 ```
 
-For a simple proof of concept in local, you can run the software with `config_kme1.json` and `config_kme2.json` files as argument for respectively KME1 and KME2.
+For a simple proof of concept in local, you can run the software with 
+`config_kme1.json5` and `config_kme2.json5` files as argument for 
+respectively KME1 and KME2.
 
 For local tests, certificates are pre-generated and stored in the `certs` folder.
 
@@ -213,9 +215,10 @@ Then replace the `other_kmes/https_client_authentication_certificate` field in y
 #### Starting the server
 
 ```bash
-target/release/qkd_kme_server kme_config.json
+target/release/qkd_kme_server kme_config.json5
 ```
-with `kme_config.json` being the configuration file for the KME, explained below.
+with `kme_config.json5` being the configuration file for the KME, explained 
+below.
 
 Wait a few seconds until all keys are loaded and the server is ready.
 
@@ -227,9 +230,8 @@ Launch the server on all KMEs.
 
 ## Configuration
 
-The whole configuration is stored in a JSON file. You can find examples in `config_kme1.json` and `config_kme2.json`.
-
-:checkered_flag: I plan to use JSON5 in the future to allow comments and hex numbers in the configuration file.
+The whole configuration is stored in a JSON5 file. You can find examples in 
+`config_kme1.json5` and `config_kme2.json5`.
 
 Here are the configuration sections:
 > `this_kme` This section describes the KME itself
@@ -279,7 +281,10 @@ Here are the configuration sections:
 >>
 >> `kme_id` ID of the KME to which the SAE belongs, either ID of this KME or a remote KME.
 >>
->> `https_client_certificate_serial` If SAE belongs to this KME, integer array of the serial number of the `.crt` client certificate. :red_circle: As the configuration does not support JSON5 for now, you must type all the numbers in decimal format :red_circle:
+>> `https_client_certificate_serial` If SAE belongs to this KME, integer 
+> array of the serial number of the `.crt` client certificate. As the 
+> configuration is in JSON5, you can type the numbers in hexadecimal 
+> format
 
 ---
 

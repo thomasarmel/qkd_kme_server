@@ -165,9 +165,9 @@ mod tests {
     #[serial]
     async fn test_extract_config_to_qkd_manager() {
         #[cfg(not(target_os = "macos"))]
-        const CONFIG_PATH: &'static str = "tests/data/test_kme_config.json";
+        const CONFIG_PATH: &'static str = "tests/data/test_kme_config.json5";
         #[cfg(target_os = "macos")]
-        const CONFIG_PATH: &'static str = "tests/data/test_kme_config_macos.json";
+        const CONFIG_PATH: &'static str = "tests/data/test_kme_config_macos.json5";
 
         let config = Config::from_json_path(CONFIG_PATH).unwrap();
         let qkd_manager = ConfigExtractor::extract_config_to_qkd_manager(&config).unwrap();

@@ -22,7 +22,7 @@ impl Config {
     /// Extract configuration from JSON file
     pub fn from_json_path(json_config_file_path: &str) -> Result<Self, io::Error> {
         let config: Self = match std::fs::read_to_string(json_config_file_path) {
-            Ok(json) => match serde_json::from_str(&json) {
+            Ok(json) => match serde_json5::from_str(&json) {
                 Ok(config) => config,
                 Err(_) => return Err(io_err("Error deserializing JSON"))
             },
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_config_deserialization() {
-        const JSON_CONFIG_PATH: &'static str = "tests/data/test_kme_config.json";
+        const JSON_CONFIG_PATH: &'static str = "tests/data/test_kme_config.json5";
         let config = Config::from_json_path(JSON_CONFIG_PATH).unwrap();
         assert_eq!(config.this_kme_config.id, 1);
         assert_eq!(config.this_kme_config.sqlite_db_path, ":memory:");
@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_config_deserialization_error() {
-        const JSON_CONFIG_PATH: &'static str = "tests/data/test_kme_config_json_error.json";
+        const JSON_CONFIG_PATH: &'static str = "tests/data/test_kme_config_json_error.json5";
         let config = Config::from_json_path(JSON_CONFIG_PATH);
         assert!(config.is_err());
         assert_eq!(config.unwrap_err().to_string(), "Error deserializing JSON");
@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_config_deserialization_file_not_found() {
-        const JSON_CONFIG_PATH: &'static str = "this_config_json_file_doesnt_exist.json";
+        const JSON_CONFIG_PATH: &'static str = "this_config_json_file_doesnt_exist.json5";
         let config = Config::from_json_path(JSON_CONFIG_PATH);
         assert!(config.is_err());
         assert_eq!(config.unwrap_err().to_string(), "Error reading JSON file");
