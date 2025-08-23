@@ -85,7 +85,7 @@ impl<'a> RequestContext<'a> {
         })?)
     }
 
-    fn certificate_or_error(&self) -> Result<&X509Certificate, io::Error> {
+    fn certificate_or_error(&self) -> Result<&X509Certificate<'_>, io::Error> {
         self.client_cert.as_ref().ok_or_else(|| {
             io_err("No client certificate in current context")
         })
