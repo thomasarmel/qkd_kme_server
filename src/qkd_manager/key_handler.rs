@@ -274,9 +274,10 @@ impl KeyHandler {
     }
 
     fn get_sae_keys(&self, origin_sae_certificate: &SaeClientCertSerial, target_sae_id: SaeId, key_count: RequestedKeyCount) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const FETCH_PREINIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, key_uuid, key, other_kme_id FROM uninit_keys WHERE other_kme_id = :other_kme_id LIMIT :key_request_limit;";
-
         let key_count = key_count.get();
+
+        // TODO use system agnostic db manager like sqlx or rusqlite
+        let fetch_preinit_key_prepared_statement = format!("SELECT id, key_uuid, key, other_kme_id FROM uninit_keys WHERE other_kme_id = ? LIMIT {};", key_count);
 
         if key_count == 0 {
             return Ok(QkdManagerResponse::Keys(ResponseQkdKeysList {
@@ -291,13 +292,9 @@ impl KeyHandler {
 
         export_important_logging_message!(&self, &format!("SAE {} requested a key to communicate with {}", origin_sae_id, target_sae_id));
 
-        let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, FETCH_PREINIT_KEY_PREPARED_STATEMENT);
-        stmt.bind((":other_kme_id", target_kme_id)).map_err(|_| {
+        let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, fetch_preinit_key_prepared_statement);
+        stmt.bind((1, target_kme_id)).map_err(|_| {
             error!("Error binding target KME ID");
-            QkdManagerResponse::Ko
-        })?;
-        stmt.bind((":key_request_limit", key_count as i64)).map_err(|_| {
-            error!("Error binding requested keys count");
             QkdManagerResponse::Ko
         })?;
 
@@ -318,10 +315,10 @@ impl KeyHandler {
             })?;
             fetched_preinit_keys.push((id, key_uuid, key));
         }
-        if stmt.next().is_err() {
+        /*if stmt.next().is_err() {
             error!("Error executing SQL statement");
             return Err(QkdManagerResponse::Ko);
-        }
+        }*/
 
         if fetched_preinit_keys.len() == 0 && key_count != 0 {
             warn!("No key available for SAE {} to communicate with SAE {}", origin_sae_id, target_sae_id);
