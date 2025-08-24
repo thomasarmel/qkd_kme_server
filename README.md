@@ -328,7 +328,8 @@ Here are the configuration sections:
 > *This route should be called by the master SAE*
 
 > By default, only one key is requested (empty request body). You can 
-> request multiple keys by specifying the `number` field in the request body 
+> request multiple keys by specifying the `number` field in the JSON request 
+> body 
 > (**max 10**):
 > ```json
 > {
