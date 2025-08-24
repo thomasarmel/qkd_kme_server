@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 pub mod util;
+pub mod objects;
 
 use std::fs::File;
 use std::io::Read;
@@ -31,13 +32,19 @@ pub fn setup() {
         1,
         b"this_is_secret_key_1_of_32_bytes",
     ).unwrap();
-
     qkd_manager.add_pre_init_qkd_key(qkd_key_1).unwrap();
+
     let qkd_key_2 = PreInitQkdKeyWrapper::new(
         1,
         b"this_is_secret_key_1_of_32_bytes",
     ).unwrap();
     qkd_manager.add_pre_init_qkd_key(qkd_key_2).unwrap();
+
+    let qkd_key_3 = PreInitQkdKeyWrapper::new(
+        1,
+        b"this_is_secret_key_3_of_32_bytes",
+    ).unwrap();
+    qkd_manager.add_pre_init_qkd_key(qkd_key_3).unwrap();
 
     tokio::spawn(async move {server.run(&qkd_manager).await.unwrap();});
 }

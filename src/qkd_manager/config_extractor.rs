@@ -1,13 +1,13 @@
+use crate::config::Config;
+use crate::qkd_manager::{PreInitQkdKeyWrapper, QkdManager};
+use crate::{io_err, KmeId};
+use log::error;
+use notify::event::{AccessKind, AccessMode};
+use notify::{EventKind, RecursiveMode, Watcher};
 use std::io;
 use std::io::{BufReader, Read};
 use std::path::Path;
 use std::sync::Arc;
-use log::error;
-use notify::event::{AccessKind, AccessMode};
-use notify::{EventKind, RecursiveMode, Watcher};
-use crate::config::Config;
-use crate::{io_err, KmeId};
-use crate::qkd_manager::{PreInitQkdKeyWrapper, QkdManager};
 
 pub(super) struct ConfigExtractor {}
 
@@ -156,10 +156,11 @@ impl ConfigExtractor {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use serial_test::serial;
     use crate::config::Config;
     use crate::qkd_manager::config_extractor::ConfigExtractor;
+    use crate::RequestedKeyCount;
+    use serial_test::serial;
+    use std::sync::Arc;
 
     #[tokio::test]
     #[serial]
@@ -172,7 +173,7 @@ mod tests {
         let config = Config::from_json_path(CONFIG_PATH).unwrap();
         let qkd_manager = ConfigExtractor::extract_config_to_qkd_manager(&config).unwrap();
         assert_eq!(qkd_manager.kme_id, 1);
-        assert!(qkd_manager.get_qkd_key(2, &vec![0x70, 0xF4, 0x4F, 0x56, 0x0C, 0x3F, 0x27, 0xD4, 0xB2, 0x11, 0xA4, 0x78, 0x13, 0xAF, 0xD0, 0x3C, 0x03, 0x81, 0x3B, 0x8E]).await.is_ok());
+        assert!(qkd_manager.get_qkd_keys(2, &vec![0x70, 0xF4, 0x4F, 0x56, 0x0C, 0x3F, 0x27, 0xD4, 0xB2, 0x11, 0xA4, 0x78, 0x13, 0xAF, 0xD0, 0x3C, 0x03, 0x81, 0x3B, 0x8E], RequestedKeyCount::new(1).unwrap()).await.is_ok());
     }
 
     #[test]

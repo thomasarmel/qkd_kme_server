@@ -327,7 +327,14 @@ Here are the configuration sections:
 
 > *This route should be called by the master SAE*
 
-> :point_right: **Note**: Only one key per request is supported for now.
+> By default, only one key is requested (empty request body). You can 
+> request multiple keys by specifying the `number` field in the request body 
+> (**max 10**):
+> ```json
+> {
+>   "number": 3
+> }
+> ```
 
 > Retrieve a key already exchanged between the master KME (the one responding) and the slave KME.
 >
@@ -345,6 +352,26 @@ Here are the configuration sections:
 >     ]
 >   }
 >   ```
+> 
+> Or for multiple keys:
+>  ```json
+>   {
+>    "keys": [
+>        {
+>            "key_ID": "9768257a-1c59-d255-a93d-d4bb1b693651",
+>            "key": "zNK/zOIUDAFyuKRM0dSJLLZVYaDTuhzhAIACBgWABfY="
+>        },
+>        {
+>            "key_ID": "80ccede4-05c9-815a-8e80-d151452bcb82",
+>            "key": "/f8mwVeHSVMWjAAp5GGlSJDJSuB47Agvvo6ta66lIqQ="
+>        },
+>        {
+>             "key_ID": "f6c4a667-23ea-7e58-b07d-95a568d140da",
+>             "key": "6Db9BONohKETQqFPwIEYMS5h0GmskMickEWbowUQsqs="
+>         }
+>     ]
+> }
+> ```
 
 
 #### POST /api/v1/keys/{master SAE id}/dec_keys

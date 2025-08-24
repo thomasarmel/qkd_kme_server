@@ -1,6 +1,7 @@
 use const_format::concatcp;
 use reqwest::header::CONTENT_TYPE;
 use serial_test::serial;
+use crate::common::objects::MasterKeyRequestObj;
 use crate::common::util::assert_string_equal;
 
 mod common;
@@ -15,7 +16,7 @@ async fn test_key_transfer_other_kme() {
     const REMOTE_DEC_KEYS_REQUEST_URL: &'static str = concatcp!("https://", common::REMOTE_KME_HOST_PORT ,"/api/v1/keys/1/dec_keys");
     const REMOTE_DEC_KEYS_REQUEST_URL_2: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/2/dec_keys");
     const REMOTE_DEC_KEYS_REQ_BODY: &'static str = include_str!("data/dec_keys_post_req_body.json");
-    const REMOTE_DEC_KEYS_EPECTED_RESP_BODY: &'static str = include_str!("data/dec_keys.json");
+    const REMOTE_DEC_KEYS_EXPECTED_RESP_BODY: &'static str = include_str!("data/dec_keys.json");
     const NOT_FOUND_BODY: &'static str = include_str!("data/not_found_body.json");
 
     common::setup_2_kmes_network();
@@ -33,7 +34,7 @@ async fn test_key_transfer_other_kme() {
     assert!(req_key_remote_response.is_ok());
     let req_key_remote_response = req_key_remote_response.unwrap();
     assert_eq!(req_key_remote_response.status(), 200);
-    assert_string_equal(&req_key_remote_response.text().await.unwrap(), REMOTE_DEC_KEYS_EPECTED_RESP_BODY);
+    assert_string_equal(&req_key_remote_response.text().await.unwrap(), REMOTE_DEC_KEYS_EXPECTED_RESP_BODY);
 
     let post_key_response = sae2_reqwest_client.post(INIT_POST_KEY_REQUEST_URL_2).send().await;
     assert!(post_key_response.is_ok());
@@ -55,6 +56,45 @@ async fn test_key_transfer_other_kme() {
     assert_eq!(req_key_remote_response.status(), 200);
     const EXPECTED_BODY_DEC_KEY_2: &'static str = "{\n  \"keys\": [\n    {\n      \"key_ID\": \"4567f16a-843b-f659-9af6-d2126cb97e16\",\n      \"key\": \"dGhpc19pc19zZWNyZXRfa2V5XzJfb2ZfMzJfYnl0ZXM=\"\n    }\n  ]\n}";
     assert_string_equal(&req_key_remote_response.text().await.unwrap(), EXPECTED_BODY_DEC_KEY_2);
+}
+
+#[tokio::test]
+#[serial]
+async fn test_key_transfer_other_kme_multiple() {
+    std::env::set_var(qkd_kme_server::DANGER_IGNORE_CERTS_INTER_KME_NETWORK_ENV_VARIABLE, qkd_kme_server::ACTIVATED_ENV_VARIABLE_VALUE);
+    const INIT_POST_KEY_REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/2/enc_keys");
+    const EXPECTED_INIT_KEY_RESPONSE_BODY: &'static str = include_str!("data/enc_keys_remote_multiple.json");
+    const REMOTE_DEC_KEYS_REQUEST_URL: &'static str = concatcp!("https://", common::REMOTE_KME_HOST_PORT ,"/api/v1/keys/1/dec_keys");
+    const REMOTE_DEC_KEYS_REQ_BODY: &'static str = include_str!("data/dec_keys_post_req_body_multiple_remote.json");
+    const REMOTE_DEC_KEYS_REQ_BODY_ONE_NOT_ACTIVATED: &'static str = include_str!("data/dec_keys_post_req_body_multiple.json");
+    const REMOTE_DEC_KEYS_EXPECTED_RESP_BODY: &'static str = include_str!("data/enc_keys_remote_multiple.json");
+
+    common::setup_2_kmes_network();
+
+    let key_request_json_body = MasterKeyRequestObj {
+        number: Some(2)
+    };
+
+    let sae1_reqwest_client = common::setup_cert_auth_reqwest_client();
+    let sae2_reqwest_client = common::setup_cert_auth_reqwest_client_remote_kme();
+
+    let post_key_response = sae1_reqwest_client.post(INIT_POST_KEY_REQUEST_URL).json(&key_request_json_body).send().await;
+    assert!(post_key_response.is_ok());
+    let post_key_response = post_key_response.unwrap();
+    assert_eq!(post_key_response.status(), 200);
+    assert_string_equal(&post_key_response.text().await.unwrap(), EXPECTED_INIT_KEY_RESPONSE_BODY);
+
+    // one key is not activated
+    let req_key_remote_response = sae2_reqwest_client.post(REMOTE_DEC_KEYS_REQUEST_URL).header(CONTENT_TYPE, "application/json").body(REMOTE_DEC_KEYS_REQ_BODY_ONE_NOT_ACTIVATED).send().await;
+    assert!(req_key_remote_response.is_ok());
+    let req_key_remote_response = req_key_remote_response.unwrap();
+    assert_eq!(req_key_remote_response.status(), 404);
+
+    let req_key_remote_response = sae2_reqwest_client.post(REMOTE_DEC_KEYS_REQUEST_URL).header(CONTENT_TYPE, "application/json").body(REMOTE_DEC_KEYS_REQ_BODY).send().await;
+    assert!(req_key_remote_response.is_ok());
+    let req_key_remote_response = req_key_remote_response.unwrap();
+    assert_eq!(req_key_remote_response.status(), 200);
+    assert_string_equal(&req_key_remote_response.text().await.unwrap(), REMOTE_DEC_KEYS_EXPECTED_RESP_BODY);
 }
 
 #[tokio::test]

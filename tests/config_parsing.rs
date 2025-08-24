@@ -70,8 +70,8 @@ async fn test_key_transfer_from_file_config() {
     assert!(req_key_remote_response.is_ok());
     let req_key_remote_response = req_key_remote_response.unwrap();
     assert_eq!(req_key_remote_response.status(), 200);
-    const REMOTE_DEC_KEYS_EPECTED_RESP_BODY: &'static str = "{\n  \"keys\": [\n    {\n      \"key_ID\": \"2ae3e385-4e51-7458-b1c1-69066a4cb6d7\",\n      \"key\": \"m0gAbsCqIwYgM2HMOcc8nkh6nhZG3EBAxuL6rgas1FU=\"\n    }\n  ]\n}";
-    assert_eq!(req_key_remote_response.text().await.unwrap().replace("\r", ""), REMOTE_DEC_KEYS_EPECTED_RESP_BODY);
+    const REMOTE_DEC_KEYS_EXPECTED_RESP_BODY: &'static str = "{\n  \"keys\": [\n    {\n      \"key_ID\": \"2ae3e385-4e51-7458-b1c1-69066a4cb6d7\",\n      \"key\": \"m0gAbsCqIwYgM2HMOcc8nkh6nhZG3EBAxuL6rgas1FU=\"\n    }\n  ]\n}";
+    assert_eq!(req_key_remote_response.text().await.unwrap().replace("\r", ""), REMOTE_DEC_KEYS_EXPECTED_RESP_BODY);
 
     let post_key_response = sae2_reqwest_client.post(INIT_POST_KEY_REQUEST_URL_2).send().await;
     assert!(post_key_response.is_ok());

@@ -10,6 +10,7 @@ unused_qualifications
 )]
 
 use std::io;
+use bounded_integer::BoundedUsize;
 
 pub mod server;
 pub mod routes;
@@ -50,6 +51,9 @@ pub const MAX_QKD_KEY_SAE_IDS: usize = 0; // We don't support key multicast yet
 /// How many keys can be stored in the KME for a given SAE
 pub const MAX_QKD_KEYS_PER_SAE: usize = 10;
 
+/// Maximum number of keys that can be requested in a single key request to a master KME
+pub const MAX_QKD_KEY_PER_KEY_ENC_REQUEST: usize = 10;
+
 /// Location of the SQLite database file used by the KME to store keys, use ":memory:" for in-memory database
 pub const MEMORY_SQLITE_DB_PATH: &'static str = ":memory:";
 
@@ -75,6 +79,9 @@ pub type QkdEncKey = [u8; QKD_KEY_SIZE_BYTES];
 
 /// Type for SAE certificate serial number
 pub type SaeClientCertSerial = Vec<u8>;
+
+/// Type representing the number of keys requested by the SAE, bounded to [0, MAX_QKD_KEY_PER_KEY_ENC_REQUEST]
+pub type RequestedKeyCount = BoundedUsize<0, MAX_QKD_KEY_PER_KEY_ENC_REQUEST>;
 
 #[cfg(test)]
 mod test {

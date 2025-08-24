@@ -8,9 +8,9 @@ use crate::routes::RequestContext;
 use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
 use std::string::String;
-use log::{error, warn};
-use crate::qkd_manager::http_request_obj::RequestListKeysIds;
-use crate::{ensure_sae_id_format_type, SaeId};
+use log::{error, info, warn};
+use crate::qkd_manager::http_request_obj::{MasterKeyRequestObj, RequestListKeysIds};
+use crate::{ensure_sae_id_format_type, RequestedKeyCount, SaeId};
 use crate::ensure_client_certificate_serial;
 use crate::routes::sae_zone_routes::EtsiSaeQkdRoutesV1;
 
@@ -66,15 +66,40 @@ pub(in crate::routes) fn route_get_status(rcx: &RequestContext, _req: Request<bo
 //   ]
 // }
 // ```
-pub(in crate::routes) async fn route_get_key(rcx: & RequestContext<'_>, _req: Request<body::Incoming>, slave_sae_id: &str) -> Result<Response<Full<Bytes>>, Infallible> {
+pub(in crate::routes) async fn route_get_key(rcx: & RequestContext<'_>, req: Request<body::Incoming>, slave_sae_id: &str) -> Result<Response<Full<Bytes>>, Infallible> {
+    const DEFAULT_KEY_REQUEST_COUNT: usize = 1;
     // Ensure the SAE ID is an integer
     let slave_sae_id_i64 = ensure_sae_id_format_type!(slave_sae_id);
 
     // Check if the client certificate serial is present
     let raw_client_certificate_serial = ensure_client_certificate_serial!(rcx);
 
+    let requested_keys_count = RequestedKeyCount::new(match req.into_body().collect().await {
+        Ok(bytes) => {
+                match serde_json::from_slice::<MasterKeyRequestObj>(&bytes.to_bytes()) {
+                    Ok(body) => body.number.unwrap_or(DEFAULT_KEY_REQUEST_COUNT),
+                    Err(_) => {
+                        DEFAULT_KEY_REQUEST_COUNT
+                    }
+                }
+            }
+        Err(_) => {
+            DEFAULT_KEY_REQUEST_COUNT
+        }
+    });
+
+    let requested_keys_count = match requested_keys_count {
+        Some(count) => count,
+        None => {
+            error!("Too many keys requested, max is {}", RequestedKeyCount::MAX_VALUE);
+            return EtsiSaeQkdRoutesV1::bad_request();
+        }
+    };
+
+    info!("{} keys have been requested", requested_keys_count);
+
     // Retrieve the key from the QKD manager
-    match rcx.qkd_manager.get_qkd_key(slave_sae_id_i64, &raw_client_certificate_serial).await.unwrap_or_else(identity) {
+    match rcx.qkd_manager.get_qkd_keys(slave_sae_id_i64, &raw_client_certificate_serial, requested_keys_count).await.unwrap_or_else(identity) {
         QkdManagerResponse::Keys(keys) => {
             // Serialize the keys to JSON
             let keys_json = match keys.to_json() {

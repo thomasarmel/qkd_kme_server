@@ -1,18 +1,18 @@
 //! QKD manager key handler, supposed to run in a separate thread
 
-use std::convert::identity;
-use std::io;
-use std::sync::Arc;
-use uuid::Bytes;
-use x509_parser::nom::AsBytes;
-use crate::{io_err, KmeId, qkd_manager, SaeClientCertSerial, SaeId};
-use crate::qkd_manager::{http_request_obj, KMEInfo, PreInitQkdKeyWrapper, QkdManagerCommand, QkdManagerResponse, router, SAEInfo};
+use crate::ensure_prepared_statement_ok;
+use crate::event_subscription::ImportantEventSubscriber;
+use crate::export_important_logging_message;
+use crate::qkd_manager::http_response_obj::{ResponseQkdKey, ResponseQkdKeysList};
+use crate::qkd_manager::{http_request_obj, router, KMEInfo, PreInitQkdKeyWrapper, QkdManagerCommand, QkdManagerResponse, SAEInfo};
+use crate::{io_err, qkd_manager, KmeId, RequestedKeyCount, SaeClientCertSerial, SaeId};
 use base64::{engine::general_purpose, Engine as _};
 use log::{error, info, warn};
-use crate::qkd_manager::http_response_obj::{ResponseQkdKey, ResponseQkdKeysList};
-use crate::ensure_prepared_statement_ok;
-use crate::export_important_logging_message;
-use crate::event_subscription::ImportantEventSubscriber;
+use std::convert::identity;
+use std::sync::Arc;
+use std::{io, vec};
+use uuid::Bytes;
+use x509_parser::nom::AsBytes;
 
 /// Describes the key handler that will check authentication and manage the QKD keys in the database in a separate thread
 pub(super) struct KeyHandler {
@@ -85,9 +85,9 @@ impl KeyHandler {
                             }
                         },
                         // The master SAE asks for keys ready to be sent to the slave SAE
-                        QkdManagerCommand::GetKeys(sae_certificate_serial, slave_sae_id) => {
+                        QkdManagerCommand::GetKeys(sae_certificate_serial, slave_sae_id, keys_count) => {
                             info!("Getting key for SAE ID {}", slave_sae_id);
-                            if self.response_tx.send(self.get_sae_keys(&sae_certificate_serial, slave_sae_id).unwrap_or_else(identity)).is_err() {
+                            if self.response_tx.send(self.get_sae_keys(&sae_certificate_serial, slave_sae_id, keys_count).unwrap_or_else(identity)).is_err() {
                                 error!("Error QKD manager sending response");
                             }
                         }
@@ -134,8 +134,8 @@ impl KeyHandler {
                                 error!("Error QKD manager sending response");
                             }
                         },
-                        QkdManagerCommand::ActivateKeyFromRemote(origin_sae_id, target_sae_id, target_key_uuid) => {
-                            let key_activate_response = self.activate_key_uuid_sae(origin_sae_id, target_sae_id, target_key_uuid).unwrap_or_else(identity);
+                        QkdManagerCommand::ActivateKeyFromRemote(origin_sae_id, target_sae_id, target_key_uuids_list) => {
+                            let key_activate_response = self.activate_key_uuids_sae(origin_sae_id, target_sae_id, target_key_uuids_list).unwrap_or_else(identity);
                             if self.response_tx.send(key_activate_response).is_err() {
                                 error!("Error QKD manager sending response");
                             }
@@ -273,8 +273,16 @@ impl KeyHandler {
         Ok(QkdManagerResponse::Status(response_qkd_key_status))
     }
 
-    fn get_sae_keys(&self, origin_sae_certificate: &SaeClientCertSerial, target_sae_id: SaeId) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const FETCH_PREINIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, key_uuid, key, other_kme_id FROM uninit_keys WHERE other_kme_id = ? LIMIT 1;";
+    fn get_sae_keys(&self, origin_sae_certificate: &SaeClientCertSerial, target_sae_id: SaeId, key_count: RequestedKeyCount) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        const FETCH_PREINIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, key_uuid, key, other_kme_id FROM uninit_keys WHERE other_kme_id = ? LIMIT ?;";
+
+        let key_count = key_count.get();
+
+        if key_count == 0 {
+            return Ok(QkdManagerResponse::Keys(ResponseQkdKeysList {
+                keys: vec![],
+            }))
+        }
 
         // Ensure the origin (master) SAE ID is valid, and get its SAE id
         let origin_sae_id = self.get_sae_id_from_certificate(origin_sae_certificate).ok_or(QkdManagerResponse::AuthenticationError)?;
@@ -288,114 +296,141 @@ impl KeyHandler {
             error!("Error binding target KME ID");
             QkdManagerResponse::Ko
         })?;
-        let sql_execution_state = stmt.next().map_err(|_| {
-            error!("Error executing SQL statement");
+        stmt.bind((2, key_count as i64)).map_err(|_| {
+            error!("Error binding requested keys count");
             QkdManagerResponse::Ko
         })?;
 
-        if sql_execution_state != sqlite::State::Row {
-            return Err(QkdManagerResponse::NotFound); // TODO: we could return an empty array instead
+        let mut fetched_preinit_keys: Vec<(i64, String, Vec<u8>)> = Vec::with_capacity(key_count);
+
+        while let Ok(sqlite::State::Row) = stmt.next() {
+            let id = stmt.read::<i64, usize>(0).map_err(|_| {
+                error!("Error reading SQL statement result");
+                QkdManagerResponse::Ko
+            })?;
+            let key_uuid: String = stmt.read::<String, usize>(1).map_err(|_| {
+                error!("Error reading SQL statement result");
+                QkdManagerResponse::Ko
+            })?;
+            let key: Vec<u8> = stmt.read::<Vec<u8>, usize>(2).map_err(|_| {
+                error!("Error reading SQL statement result");
+                QkdManagerResponse::Ko
+            })?;
+            fetched_preinit_keys.push((id, key_uuid, key));
+        }
+        if stmt.next().is_err() {
+            error!("Error executing SQL statement");
+            return Err(QkdManagerResponse::Ko);
         }
 
-        let id = stmt.read::<i64, usize>(0).map_err(|_| {
-            error!("Error reading SQL statement result");
-            QkdManagerResponse::Ko
-        })?;
-        let key_uuid: String = stmt.read::<String, usize>(1).map_err(|_| {
-            error!("Error reading SQL statement result");
-            QkdManagerResponse::Ko
-        })?;
-        let key: Vec<u8> = stmt.read::<Vec<u8>, usize>(2).map_err(|_| {
-            error!("Error reading SQL statement result");
-            QkdManagerResponse::Ko
-        })?;
+        if fetched_preinit_keys.len() == 0 && key_count != 0 {
+            warn!("No key available for SAE {} to communicate with SAE {}", origin_sae_id, target_sae_id);
+            return Err(QkdManagerResponse::NotFound);
+        }
+
+        if fetched_preinit_keys.len() < key_count {
+            warn!("Only {} keys available for SAE {} to communicate with SAE {}, while {} were requested", fetched_preinit_keys.len(), origin_sae_id, target_sae_id, key_count);
+        }
+
         if origin_kme_id != target_kme_id {
             // send key to other KME
             // We must ensure:
             // - other KME is authenticated (client certificate and operating system trust store)
             // - other SAE belongs to other KME (statically managed for now)
-            self.activate_key_on_other_kme(origin_sae_id, target_kme_id, target_sae_id, &key_uuid).map_err(|qkd_manager_activation_error| {
+            let uuids_list = fetched_preinit_keys.iter().map(|(_, key_uuid, _)| key_uuid.clone()).collect::<Vec<_>>();
+
+            self.activate_keys_on_other_kme(origin_sae_id, target_kme_id, target_sae_id, uuids_list).map_err(|qkd_manager_activation_error| {
                 error!("Error activating key on other KME");
                 qkd_manager_activation_error
             })?;
             export_important_logging_message!(&self, &format!("As SAE {} belongs to KME {}, activating it through inter KMEs network", target_sae_id, target_kme_id));
         }
 
-        self.delete_pre_init_key_with_id(id).map_err(|_| {
-            error!("Error deleting pre-init key {}", id);
-            QkdManagerResponse::Ko
-        })?;
+        for (key_id, key_uuid, key) in &fetched_preinit_keys {
+            self.delete_pre_init_key_with_id(*key_id).map_err(|_| {
+                error!("Error deleting pre-init key {}", key_id);
+                QkdManagerResponse::Ko
+            })?;
 
-        info!("Saving key {} in init keys", key_uuid);
+            info!("Saving key {} in init keys", key_uuid);
 
-        self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id).map_err(|_| {
-            error!("Error inserting activated key");
-            QkdManagerResponse::Ko
-        })?;
+            self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id).map_err(|_| {
+                error!("Error inserting activated key");
+                QkdManagerResponse::Ko
+            })?;
+        }
 
-        // Encode the key in base64
-        let response_qkd_key = ResponseQkdKey {
-            key_ID: key_uuid,
-            key: general_purpose::STANDARD.encode(&key)
-        };
+        let keys_response = fetched_preinit_keys.iter().map(|(_, key_uuid, key)| {
+            // Encode the key in base64
+            ResponseQkdKey {
+                key_ID: key_uuid.clone(),
+                key: general_purpose::STANDARD.encode(&key)
+            }
+        }).collect::<Vec<_>>();
 
         // Return a list of key objects
         Ok(QkdManagerResponse::Keys(ResponseQkdKeysList {
-            keys: vec![response_qkd_key],
+            keys: keys_response,
         }))
     }
 
-    fn activate_key_uuid_sae(&self, origin_sae_id: SaeId, target_sae_id: SaeId, key_uuid: String) -> Result<QkdManagerResponse, QkdManagerResponse> {
+    fn activate_key_uuids_sae(&self, origin_sae_id: SaeId, target_sae_id: SaeId, key_uuids_list: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const GET_PRE_INIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, key, other_kme_id FROM uninit_keys WHERE key_uuid = ? LIMIT 1;";
 
-        let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, GET_PRE_INIT_KEY_PREPARED_STATEMENT);
-        stmt.bind((1, key_uuid.as_str())).map_err(|_| {
-            error!("Error binding key UUID");
-            QkdManagerResponse::Ko
-        })?;
-        let sql_execution_state = stmt.next().map_err(|_| {
-            error!("Error executing SQL statement");
-            QkdManagerResponse::Ko
-        })?;
+        let retrieved_preinit_key_tuples = key_uuids_list.iter().map(|key_uuid| {
+            let mut stmt = ensure_prepared_statement_ok!(self.sqlite_db, GET_PRE_INIT_KEY_PREPARED_STATEMENT);
+            stmt.bind((1, key_uuid.as_str())).map_err(|_| {
+                error!("Error binding key UUID");
+                QkdManagerResponse::Ko
+            })?;
+            let sql_execution_state = stmt.next().map_err(|_| {
+                error!("Error executing SQL statement");
+                QkdManagerResponse::Ko
+            })?;
 
-        if sql_execution_state != sqlite::State::Row {
-            return Err(QkdManagerResponse::NotFound);
+            if sql_execution_state != sqlite::State::Row {
+                return Err(QkdManagerResponse::NotFound);
+            }
+
+            let key_id = stmt.read::<i64, usize>(0).map_err(|_| {
+                error!("Error reading SQL statement result");
+                QkdManagerResponse::Ko
+            })?;
+            let key: Vec<u8> = stmt.read::<Vec<u8>, usize>(1).map_err(|_| {
+                error!("Error reading SQL statement result");
+                QkdManagerResponse::Ko
+            })?;
+            let _other_kme_id = stmt.read::<KmeId, usize>(2).map_err(|_| {
+                error!("Error reading SQL statement result");
+                QkdManagerResponse::Ko
+            })?;
+            Ok((key_uuid.clone(), key_id, key))
+        }).collect::<Result<Vec<_>, _>>()?;
+
+        for (key_uuid, key_id, key) in retrieved_preinit_key_tuples {
+            self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id).map_err(|_| {
+                error!("Error inserting activated key");
+                QkdManagerResponse::Ko
+            })?;
+            self.delete_pre_init_key_with_id(key_id).map_err(|_| {
+                error!("Error deleting pre-init key {}", key_id);
+                QkdManagerResponse::Ko
+            })?;
+
+            info!("Key {} activated between saes {} and {}", key_uuid, origin_sae_id, target_sae_id);
         }
 
-        let key_id = stmt.read::<i64, usize>(0).map_err(|_| {
-            error!("Error reading SQL statement result");
-            QkdManagerResponse::Ko
-        })?;
-        let key: Vec<u8> = stmt.read::<Vec<u8>, usize>(1).map_err(|_| {
-            error!("Error reading SQL statement result");
-            QkdManagerResponse::Ko
-        })?;
-        let _other_kme_id = stmt.read::<KmeId, usize>(2).map_err(|_| {
-            error!("Error reading SQL statement result");
-            QkdManagerResponse::Ko
-        })?;
-
-        self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id).map_err(|_| {
-            error!("Error inserting activated key");
-            QkdManagerResponse::Ko
-        })?;
-        self.delete_pre_init_key_with_id(key_id).map_err(|_| {
-            error!("Error deleting pre-init key {}", key_id);
-            QkdManagerResponse::Ko
-        })?;
-
-        info!("Key {} activated between saes {} and {}", key_uuid, origin_sae_id, target_sae_id);
         Ok(QkdManagerResponse::Ok)
     }
 
-    fn activate_key_on_other_kme(&self, caller_master_sae_id: SaeId, other_kme_id: KmeId, other_sae_id: SaeId, key_uuid: &str) -> Result<(), QkdManagerResponse> {
+    fn activate_keys_on_other_kme(&self, caller_master_sae_id: SaeId, other_kme_id: KmeId, other_sae_id: SaeId, key_uuids: Vec<String>) -> Result<(), QkdManagerResponse> {
         let danger_should_ignore_remote_kme_cert = match std::env::var(crate::DANGER_IGNORE_CERTS_INTER_KME_NETWORK_ENV_VARIABLE) {
             Ok(val) => val == crate::ACTIVATED_ENV_VARIABLE_VALUE,
             Err(_) => false,
         };
 
         let req_body = http_request_obj::ActivateKeyRemoteKME {
-            key_ID: key_uuid.to_string(),
+            key_IDs_list: key_uuids,
             origin_SAE_ID: caller_master_sae_id,
             remote_SAE_ID: other_sae_id,
         };
@@ -432,8 +467,8 @@ impl KeyHandler {
         let response = kme_client.post(&format!("https://{}/keys/activate", kme_classical_info.ip_domain_port))
             .json(&req_body)
             .send()
-            .map_err(|_| {
-                error!("Error sending HTTP request");
+            .map_err(|http_error| {
+                error!("Error sending HTTP request: {}", http_error);
                 QkdManagerResponse::RemoteKmeCommunicationError
             })?;
 
@@ -690,12 +725,13 @@ macro_rules! export_important_logging_message {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Error;
-    use std::sync::{Arc, Mutex};
-    use std::thread;
     use crate::event_subscription::ImportantEventSubscriber;
     use crate::qkd_manager::http_response_obj::HttpResponseBody;
     use crate::qkd_manager::QkdManagerResponse;
+    use crate::RequestedKeyCount;
+    use std::io::Error;
+    use std::sync::{Arc, Mutex};
+    use std::thread;
 
     const CLIENT_CERT_SERIAL_SIZE_BYTES: usize = 20;
 
@@ -811,7 +847,7 @@ mod tests {
         let kme_id = 1;
         let sae_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
         key_handler.add_sae(sae_id, kme_id, &Some(sae_certificate_serial.clone())).unwrap();
-        let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, sae_id);
+        let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, sae_id, RequestedKeyCount::new(1).unwrap());
         assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
 
         // add key
@@ -830,11 +866,27 @@ mod tests {
         };
         key_handler.add_preinit_qkd_key(key).unwrap();
 
-        let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, 2);
+        // add key
+        let key = crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
+            key_uuid: *uuid::Uuid::from_bytes([2u8; 16]).as_bytes(),
+            key: [2u8; crate::QKD_KEY_SIZE_BITS / 8],
+        };
+        key_handler.add_preinit_qkd_key(key).unwrap();
+
+        // add key
+        let key = crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
+            key_uuid: *uuid::Uuid::from_bytes([3u8; 16]).as_bytes(),
+            key: [3u8; crate::QKD_KEY_SIZE_BITS / 8],
+        };
+        key_handler.add_preinit_qkd_key(key).unwrap();
+
+        let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, 2, RequestedKeyCount::new(1).unwrap());
         assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
 
         key_handler.add_sae(2, kme_id, &Some(vec![1u8; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
-        let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, 2).unwrap();
+        let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, 2, RequestedKeyCount::new(1).unwrap()).unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
         let response_keys = match qkd_manager_response {
             QkdManagerResponse::Keys(keys) => keys,
@@ -848,8 +900,27 @@ mod tests {
         assert_eq!(response_keys.to_json().unwrap(), "{\n  \"keys\": [\n    {\n      \"key_ID\": \"00000000-0000-0000-0000-000000000000\",\n      \"key\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"\n    }\n  ]\n}");
 
 
-        // Same request
-        let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, 2).unwrap();
+        let qkd_manager_response = key_handler.get_sae_keys(&sae_certificate_serial, 2, RequestedKeyCount::new(2).unwrap()).unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
+        let response_keys = match qkd_manager_response {
+            QkdManagerResponse::Keys(keys) => keys,
+            _ => {
+                panic!("Unexpected response");
+            }
+        };
+        assert_eq!(response_keys.keys.len(), 2);
+        assert_eq!(response_keys.keys[0].key_ID, "01010101-0101-0101-0101-010101010101");
+        assert_eq!(response_keys.keys[0].key, "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=");
+        assert_eq!(response_keys.keys[1].key_ID, "02020202-0202-0202-0202-020202020202");
+        assert_eq!(response_keys.keys[1].key, "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=");
+        assert_eq!(response_keys.to_json().unwrap(), "{\n  \"keys\": [\n    {\n      \"key_ID\": \"01010101-0101-0101-0101-010101010101\",\n      \"key\": \"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=\"\n    },\n    {\n      \"key_ID\": \"02020202-0202-0202-0202-020202020202\",\n      \"key\": \"AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=\"\n    }\n  ]\n}");
+
+        // Not enough keys
+        let qkd_manager_response = key_handler.get_sae_keys(
+            &sae_certificate_serial,
+            2,
+            RequestedKeyCount::new(2).unwrap()
+        ).unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
         let response_keys = match qkd_manager_response {
             QkdManagerResponse::Keys(keys) => keys,
@@ -859,9 +930,9 @@ mod tests {
         };
         assert_eq!(response_keys.keys.len(), 1);
         // Not the same key
-        assert_eq!(response_keys.keys[0].key_ID, "01010101-0101-0101-0101-010101010101");
-        assert_eq!(response_keys.keys[0].key, "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=");
-        assert_eq!(response_keys.to_json().unwrap(), "{\n  \"keys\": [\n    {\n      \"key_ID\": \"01010101-0101-0101-0101-010101010101\",\n      \"key\": \"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=\"\n    }\n  ]\n}");
+        assert_eq!(response_keys.keys[0].key_ID, "03030303-0303-0303-0303-030303030303");
+        assert_eq!(response_keys.keys[0].key, "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=");
+        assert_eq!(response_keys.to_json().unwrap(), "{\n  \"keys\": [\n    {\n      \"key_ID\": \"03030303-0303-0303-0303-030303030303\",\n      \"key\": \"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=\"\n    }\n  ]\n}");
     }
 
     #[test]
@@ -890,7 +961,7 @@ mod tests {
         let qkd_manager_response = key_handler.get_sae_keys_with_ids(&sae_2_certificate_serial, 1, vec!["00000000-0000-0000-0000-000000000000".to_string()]);
         assert!(matches!(qkd_manager_response, Err(QkdManagerResponse::NotFound)));
 
-        assert!(matches!(key_handler.get_sae_keys(&sae_1_certificate_serial, 2).unwrap(), QkdManagerResponse::Keys(_)));
+        assert!(matches!(key_handler.get_sae_keys(&sae_1_certificate_serial, 2, RequestedKeyCount::new(1).unwrap()).unwrap(), QkdManagerResponse::Keys(_)));
         let qkd_manager_response = key_handler.get_sae_keys_with_ids(&sae_2_certificate_serial, 1, vec!["00000000-0000-0000-0000-000000000000".to_string()]).unwrap();
 
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
@@ -982,7 +1053,7 @@ mod tests {
             key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
             key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
         }).unwrap();
-        key_handler.get_sae_keys(&sae_certificate_serial, 1).unwrap();
+        key_handler.get_sae_keys(&sae_certificate_serial, 1, RequestedKeyCount::new(1).unwrap()).unwrap();
 
         assert_eq!(subscriber.events.lock().unwrap().len(), 2);
         assert_eq!(subscriber2.events.lock().unwrap().len(), 2);
@@ -1014,7 +1085,7 @@ mod tests {
             key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
             key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
         }).unwrap();
-        key_handler.get_sae_keys(&sae_certificate_serial, 1).unwrap();
+        key_handler.get_sae_keys(&sae_certificate_serial, 1, RequestedKeyCount::new(1).unwrap()).unwrap();
 
         assert_eq!(subscriber.events.lock().unwrap().len(), 2);
         assert_eq!(subscriber2.events.lock().unwrap().len(), 2);
@@ -1049,7 +1120,7 @@ mod tests {
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
 
-        command_tx.send(super::QkdManagerCommand::GetKeys(sae_certificate_serial.clone(), sae_id)).unwrap();
+        command_tx.send(super::QkdManagerCommand::GetKeys(sae_certificate_serial.clone(), sae_id, RequestedKeyCount::new(1).unwrap())).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
 

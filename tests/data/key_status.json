@@ -4,7 +4,7 @@
   "master_SAE_ID": "1",
   "slave_SAE_ID": "1",
   "key_size": 256,
-  "stored_key_count": 2,
+  "stored_key_count": 3,
   "max_key_count": 10,
   "max_key_per_request": 1,
   "max_key_size": 256,
