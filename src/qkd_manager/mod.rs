@@ -10,6 +10,7 @@ use std::{io, thread};
 use std::sync::{Arc, Mutex};
 use log::error;
 use sha1::Digest;
+use tokio::runtime::Runtime;
 use crate::qkd_manager::http_response_obj::ResponseQkdKeysList;
 use crate::qkd_manager::QkdManagerResponse::TransmissionError;
 use crate::{io_err, KmeId, QkdEncKey, RequestedKeyCount, SaeClientCertSerial, SaeId};
@@ -52,14 +53,17 @@ impl QkdManager {
         // Spawn a new thread to handle the QKD manager
         let nickname = kme_nickname.to_owned();
         thread::spawn(move || {
-            let mut key_handler = match key_handler::KeyHandler::new(&sqlite_db_path, command_rx, response_tx, this_kme_id, nickname.to_owned()) {
-                Ok(handler) => handler,
-                Err(_) => {
-                    error!("Error creating key handler");
-                    return;
-                }
-            };
-            key_handler.run();
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async move {
+                let mut key_handler = match key_handler::KeyHandler::new(&sqlite_db_path, command_rx, response_tx, this_kme_id, nickname.to_owned()).await {
+                    Ok(handler) => handler,
+                    Err(_) => {
+                        error!("Error creating key handler");
+                        return;
+                    }
+                };
+                key_handler.run().await;
+            });
         });
 
         let dir_watcher = Arc::new(Mutex::new(Vec::new()));

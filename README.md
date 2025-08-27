@@ -76,6 +76,19 @@ For now read QKD keys are stored inside a SQLite database, either in memory or o
 
 If you encounter any issue on a platform, please check the [TROUBLESHOOTING.md](TROUBLESHOOTING.md) file. If you still have an issue, please open an issue on GitHub.
 
+### Supported DBMS
+
+- :white_check_mark: : Tested.
+- :interrobang: : Could work, but not tested.
+
+| DBMS          | Status             |
+|---------------|--------------------|
+| SQLite        | :white_check_mark: |
+
+**Note**: the database or the SQLite file should already exist, but this software can create the tables if there are missing.
+
+If you encounter any issue or want to suggest support for another DBMS, please open an issue on GitHub.
+
 ### Compilation
 
 Install Rust programming language, as explained at https://www.rust-lang.org/tools/install.

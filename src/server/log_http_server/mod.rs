@@ -61,7 +61,7 @@ impl LoggingHttpServer {
                     .serve_connection(io, service_fn(|incoming_request| Self::handle_incoming_request(incoming_request, Arc::clone(&received_log_messages))))
                     .await
                 {
-                    println!("Error serving connection: {:?}", err);
+                    eprintln!("Error serving connection: {:?}", err);
                 }
             });
         }

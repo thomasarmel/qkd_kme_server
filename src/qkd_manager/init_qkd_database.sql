@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS uninit_keys (
     other_kme_id INTEGER NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_uninitkeys_id_keyuuid ON uninit_keys(id, key_uuid);
+
 /* Keys assigned to SAEs */
 CREATE TABLE IF NOT EXISTS keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -17,8 +19,12 @@ CREATE TABLE IF NOT EXISTS keys (
     FOREIGN KEY (target_sae_id) REFERENCES saes(sae_id)
 );
 
+CREATE INDEX IF NOT EXISTS idx_keys_id_keyuuid ON keys(id, key_uuid);
+
 CREATE TABLE IF NOT EXISTS saes (
     sae_id INTEGER PRIMARY KEY NOT NULL,
     sae_certificate_serial BLOB,
     kme_id INTEGER NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_saes_saeid_saecertificateserial ON saes(sae_id, sae_certificate_serial);
