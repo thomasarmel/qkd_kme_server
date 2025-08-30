@@ -66,7 +66,7 @@ For now read QKD keys are stored inside a SQLite database, either in memory or o
 |--------------------------------|-------------------------------|
 | Linux Ubuntu 24.04 x86_64      | :white_check_mark:            |
 | Windows Server 2022 x86_64     | :white_check_mark:            |
-| MacOS 14 arm64                 | :white_check_mark:            |
+| MacOS 15 arm64                 | :white_check_mark:            |
 | Windows 11 Professional x86_64 | :negative_squared_cross_mark: |
 | FreeBSD 14 x86_64              | :negative_squared_cross_mark: |
 | All other computer platforms   | :interrobang:                 |
