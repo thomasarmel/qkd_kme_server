@@ -520,10 +520,10 @@ mod test {
         assert!(response.is_ok());
         assert_eq!(response.unwrap(), QkdManagerResponse::Ok);
 
-        // Duplicate SAE ID
+        // Duplicate SAE ID allowed
         let response = qkd_manager.add_sae(1, 1, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]));
-        assert!(response.is_err());
-        assert_eq!(response.unwrap_err(), QkdManagerResponse::Ko);
+        assert!(response.is_ok());
+        assert_eq!(response.unwrap(), QkdManagerResponse::Ok);
 
         // Add SAE with key if it doesn't belong to KME1
         let response = qkd_manager.add_sae(2, 2, &Some(vec![0; CLIENT_CERT_SERIAL_SIZE_BYTES]));

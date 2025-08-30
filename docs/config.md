@@ -30,6 +30,10 @@ This object describes the KME itself
   The software will create the tables if they do not exist.
   You can specify "`:memory:`" to use an in-memory database.
 
+- **`delete_key_file_after_read`** *(boolean)*  
+  If set to `true`, the software will delete the QKD key files after reading them.
+  You should probably set it to `true` if you use persistent database (not `:memory:`).
+
 - **`key_directory_to_watch`** *(string)*  
   A directory containing the QKD keys for key exchange between SAEs inside the secure zone. It's not very useful as direct public-key encryption is more suitable for this purpose, but it has to be set for compatibility purpose.
 
@@ -71,8 +75,9 @@ Each object contains:
   after Privacy Amplification between the two zones.
 - `inter_kme_bind_address` *(string)* — The address to connect to the other KME via 
   HTTPS, such as `1.2.3.4:14001`.
-- `ignore_system_proxy_settings` *(boolean)* — Should be set to `true` if you 
-  want to ignore system proxy settings for connection to this remote KME.
+- `ignore_system_proxy_settings` *(boolean, optional)* — Should be set to 
+  `true` if you want to ignore system proxy settings for connection to this 
+  remote KME. If not set, default to false.
 - `https_client_authentication_certificate` *(string)* — `.pfx` client certificate 
   used to authenticate to the other KME.
 - `https_client_authentication_certificate_password` *(string)* — Password for the `.

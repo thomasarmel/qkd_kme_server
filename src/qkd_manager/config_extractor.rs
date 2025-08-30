@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::qkd_manager::{PreInitQkdKeyWrapper, QkdManager};
-use crate::{io_err, KmeId, QKD_KEY_SIZE_BYTES};
+use crate::{io_err, KmeId, DEFAULT_SHOULD_IGNORE_SYSTEM_PROXY_INTER_KME, QKD_KEY_SIZE_BYTES};
 use log::error;
 use notify::event::{AccessKind, AccessMode};
 use notify::{EventKind, RecursiveMode, Watcher};
@@ -24,18 +24,22 @@ impl ConfigExtractor {
         for other_kme_config in &config.other_kme_configs {
             let kme_id = other_kme_config.id;
             let kme_keys_dir = other_kme_config.key_directory_to_watch.as_str();
-            Self::extract_and_watch_raw_keys_dir(Arc::clone(&qkd_manager), kme_id, kme_keys_dir)?;
+            Self::extract_and_watch_raw_keys_dir(Arc::clone(&qkd_manager), kme_id, kme_keys_dir, config.this_kme_config.delete_key_file_after_read)?;
         }
-        Self::extract_and_watch_raw_keys_dir(Arc::clone(&qkd_manager), config.this_kme_config.id, config.this_kme_config.key_directory_to_watch.as_str())?;
+        Self::extract_and_watch_raw_keys_dir(
+            Arc::clone(&qkd_manager),
+            config.this_kme_config.id,
+            config.this_kme_config.key_directory_to_watch.as_str(),
+            config.this_kme_config.delete_key_file_after_read)?;
         Ok(())
     }
 
-    fn extract_and_watch_raw_keys_dir(qkd_manager: Arc<QkdManager>, kme_id: KmeId, kme_keys_dir: &str) -> Result<(), io::Error> {
+    fn extract_and_watch_raw_keys_dir(qkd_manager: Arc<QkdManager>, kme_id: KmeId, kme_keys_dir: &str, delete_key_files_afterwards: bool) -> Result<(), io::Error> {
         let mut dir_watchers = qkd_manager.dir_watcher.lock().map_err(|e|
             io_err(&format!("Cannot lock dir watcher mutex: {:?}", e))
         )?;
         let qkd_manager = Arc::clone(&qkd_manager);
-        Self::extract_all_keys_from_dir(Arc::clone(&qkd_manager), kme_keys_dir, kme_id)?;
+        Self::extract_all_keys_from_dir(Arc::clone(&qkd_manager), kme_keys_dir, kme_id, delete_key_files_afterwards)?;
 
         let mut key_dir_watcher_callback = match notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
             match res {
@@ -49,7 +53,7 @@ impl ConfigExtractor {
                             Some(p) => p
                         };
                         if Self::check_file_extension_qkd_keys(event_path) {
-                            Self::extract_all_keys_from_file(Arc::clone(&qkd_manager), event_path, kme_id).map_err(|e|
+                            Self::extract_all_keys_from_file(Arc::clone(&qkd_manager), event_path, kme_id, delete_key_files_afterwards).map_err(|e|
                                 error!("Error extracting keys from file: {:?}", e)
                             ).unwrap_or(());
                         }
@@ -84,7 +88,7 @@ impl ConfigExtractor {
     }
 
 
-    fn extract_all_keys_from_file(qkd_manager: Arc<QkdManager>, file_path: &str, other_kme_id: i64) -> Result<(), io::Error> {
+    fn extract_all_keys_from_file(qkd_manager: Arc<QkdManager>, file_path: &str, other_kme_id: i64, delete_file_afterwards: bool) -> Result<(), io::Error> {
         let key_file_metadata = std::fs::metadata(file_path).map_err(|e|
             io_err(&format!("Cannot read file metadata: {:?}", e))
         )?;
@@ -112,10 +116,15 @@ impl ConfigExtractor {
         qkd_manager.add_multiple_pre_init_qkd_keys(qkd_keys).map_err(|e|
             io_err(&format!("Cannot import QKD keys from file: {:?}", e))
         )?;
+        if delete_file_afterwards {
+            std::fs::remove_file(file_path).map_err(|e|
+                io_err(&format!("Cannot delete file after reading: {:?}", e))
+            )?;
+        }
         Ok(())
     }
 
-    fn extract_all_keys_from_dir(qkd_manager: Arc<QkdManager>, dir_path: &str, other_kme_id: i64) -> Result<(), io::Error> {
+    fn extract_all_keys_from_dir(qkd_manager: Arc<QkdManager>, dir_path: &str, other_kme_id: i64, delete_key_files_afterwards: bool) -> Result<(), io::Error> {
         let paths = std::fs::read_dir(dir_path).map_err(|e|
             io_err(&format!("Cannot read directory: {:?}", e))
         )?;
@@ -130,7 +139,7 @@ impl ConfigExtractor {
             if path.is_file() {
                 let path = path.to_str().ok_or(io_err("Error converting path to string"))?;
                 if Self::check_file_extension_qkd_keys(path) {
-                    Self::extract_all_keys_from_file(Arc::clone(&qkd_manager), path, other_kme_id)?;
+                    Self::extract_all_keys_from_file(Arc::clone(&qkd_manager), path, other_kme_id, delete_key_files_afterwards)?;
                 }
             }
         }
@@ -151,7 +160,7 @@ impl ConfigExtractor {
                                                    &other_kme_config.inter_kme_bind_address,
                                                    &other_kme_config.https_client_authentication_certificate,
                                                    &other_kme_config.https_client_authentication_certificate_password,
-                                                    other_kme_config.ignore_system_proxy_settings)
+                                                    other_kme_config.ignore_system_proxy_settings.unwrap_or(DEFAULT_SHOULD_IGNORE_SYSTEM_PROXY_INTER_KME))
                 .map_err(|e|
                     io_err(&format!("Cannot add KME classical network info: {:?}", e))
                 )?;
@@ -194,22 +203,22 @@ mod tests {
     #[test]
     fn test_extract_all_keys_from_dir() {
         let qkd_manager = Arc::new(crate::qkd_manager::QkdManager::new(":memory:", 1, &None));
-        assert!(ConfigExtractor::extract_all_keys_from_dir(Arc::clone(&qkd_manager), "raw_keys/kme-1-1", 1).is_ok());
-        assert!(ConfigExtractor::extract_all_keys_from_dir(qkd_manager, "unexisting/directory", 1).is_err());
+        assert!(ConfigExtractor::extract_all_keys_from_dir(Arc::clone(&qkd_manager), "raw_keys/kme-1-1", 1, false).is_ok());
+        assert!(ConfigExtractor::extract_all_keys_from_dir(qkd_manager, "unexisting/directory", 1, false).is_err());
     }
 
     #[test]
     fn test_extract_all_keys_from_file() {
         let qkd_manager = Arc::new(crate::qkd_manager::QkdManager::new(":memory:", 1, &None));
-        assert!(ConfigExtractor::extract_all_keys_from_file(Arc::clone(&qkd_manager), "raw_keys/", 1).is_err());
-        assert!(ConfigExtractor::extract_all_keys_from_file(Arc::clone(&qkd_manager), "path/to/unexisting/file", 1).is_err());
-        assert!(ConfigExtractor::extract_all_keys_from_file(Arc::clone(&qkd_manager), "raw_keys/kme-1-1/211202_1159_CD6ADBF2.cor", 1).is_ok());
+        assert!(ConfigExtractor::extract_all_keys_from_file(Arc::clone(&qkd_manager), "raw_keys/", 1, false).is_err());
+        assert!(ConfigExtractor::extract_all_keys_from_file(Arc::clone(&qkd_manager), "path/to/unexisting/file", 1, false).is_err());
+        assert!(ConfigExtractor::extract_all_keys_from_file(Arc::clone(&qkd_manager), "raw_keys/kme-1-1/211202_1159_CD6ADBF2.cor", 1, false).is_ok());
     }
 
     #[test]
     fn test_extract_and_watch_raw_keys_dir() {
         let qkd_manager = Arc::new(crate::qkd_manager::QkdManager::new(":memory:", 1, &None));
-        assert!(ConfigExtractor::extract_and_watch_raw_keys_dir(Arc::clone(&qkd_manager), 1, "raw_keys/kme-1-1").is_ok());
-        assert!(ConfigExtractor::extract_and_watch_raw_keys_dir(Arc::clone(&qkd_manager), 1, "unexisting/directory").is_err());
+        assert!(ConfigExtractor::extract_and_watch_raw_keys_dir(Arc::clone(&qkd_manager), 1, "raw_keys/kme-1-1", false).is_ok());
+        assert!(ConfigExtractor::extract_and_watch_raw_keys_dir(Arc::clone(&qkd_manager), 1, "unexisting/directory", false).is_err());
     }
 }

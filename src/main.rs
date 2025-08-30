@@ -20,7 +20,7 @@ async fn main() {
     let config = match qkd_kme_server::config::Config::from_json_path(&std::env::args().nth(1).unwrap()) {
         Ok(config) => config,
         Err(e) => {
-            eprintln!("Error reading config: {:?}", e);
+            eprintln!("Error reading config: {}", e);
             return;
         }
     };

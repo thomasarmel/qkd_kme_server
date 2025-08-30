@@ -68,6 +68,9 @@ pub const DANGER_IGNORE_CERTS_INTER_KME_NETWORK_ENV_VARIABLE: &'static str = "QK
 /// The value of any boolean environment variable to be considered as activated
 pub const ACTIVATED_ENV_VARIABLE_VALUE: &'static str = "Y";
 
+/// If config parameter ignore_system_proxy_settings is not set, this is the default value
+pub const DEFAULT_SHOULD_IGNORE_SYSTEM_PROXY_INTER_KME: bool = false;
+
 /// The type of SAE ID
 pub type SaeId = i64;
 

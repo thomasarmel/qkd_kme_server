@@ -3,6 +3,7 @@
     "id": 1,
     "nickname": "Alice",
     "sqlite_db_path": ":memory:",
+    "delete_key_file_after_read": false,
     "key_directory_to_watch": "tests/data/raw_keys/kme-1-1",
     "saes_https_interface": {
       "listen_address": "127.0.0.1:3000",

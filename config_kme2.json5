@@ -2,6 +2,7 @@
   "this_kme": {
     "id": 2, // KME id over KME network
     "sqlite_db_path": ":memory:", // SQLite db is in memory (could be a filename as well)
+    "delete_key_file_after_read": false, // Whether to delete key files after reading them (for in-memory database, set to false)
     "key_directory_to_watch": "raw_keys/kme-2-2", // Quantum Key directory for SAEs belonging to this KME (only to be compliant with standard, as these SAEs can use public key cryptography directly)
     "saes_https_interface": {
       "listen_address": "0.0.0.0:14000", // Listening address for connections of SAEs belonging to this KME
@@ -21,7 +22,7 @@
       "id": 1, // KME id of the other KME
       "key_directory_to_watch": "raw_keys/kme-1-2", // Quantum Key directory for communication between SAEs of KME 2 and KME 1
       "inter_kme_bind_address": "127.0.0.1:13001", // Address of the other KME to connect to
-      "ignore_system_proxy_settings": true, // Ignore system proxy settings when connecting to the other KME
+      // "ignore_system_proxy_settings" not set: default to false
       "https_client_authentication_certificate": "certs/inter_kmes/client-kme2-to-kme1.pfx", // Client cert to authenticate to the other KME
       "https_client_authentication_certificate_password": "" // Password for the client cert (empty if none)
     }

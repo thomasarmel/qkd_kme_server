@@ -24,7 +24,7 @@ impl Config {
         let config: Self = match std::fs::read_to_string(json_config_file_path) {
             Ok(json) => match serde_json5::from_str(&json) {
                 Ok(config) => config,
-                Err(_) => return Err(io_err("Error deserializing JSON"))
+                Err(e) => return Err(io_err(format!("Error deserializing JSON: {}", e).as_str()))
             },
             Err(_) => return Err(io_err("Error reading JSON file"))
         };
@@ -42,6 +42,9 @@ pub struct ThisKmeConfig {
     /// Path to SQLite database file, used to store keys, certificates and other data
     /// You can use `:memory:` to use in-memory database
     pub(crate) sqlite_db_path: String,
+    /// If true, the KME will delete QKD key files after reading keys and adding them to the database.
+    /// You should probably set it to `true` when using persistent storage, and to `false` when using an in-memory database.
+    pub(crate) delete_key_file_after_read: bool,
     /// Directory for keys used in the same KME zone
     /// # Note you could use classical encryption in this case, it's just for compatibility purpose
     pub(crate) key_directory_to_watch: String,
@@ -89,8 +92,8 @@ pub struct OtherKmeConfig {
     pub(crate) key_directory_to_watch: String,
     /// IP address of the other KME, used to send keys to it using "classical channel"
     pub(crate) inter_kme_bind_address: String,
-    /// If true, the KME will ignore system proxy settings when contacting the other KME
-    pub(crate) ignore_system_proxy_settings: bool,
+    /// If true, the KME will ignore system proxy settings when contacting the other KME. Defaults to false if not set.
+    pub(crate) ignore_system_proxy_settings: Option<bool>,
     /// Client certificate for inter KME HTTPS authentication
     pub(crate) https_client_authentication_certificate: String,
     /// Password for the client certificate
@@ -118,6 +121,7 @@ mod tests {
         let config = Config::from_json_path(JSON_CONFIG_PATH).unwrap();
         assert_eq!(config.this_kme_config.id, 1);
         assert_eq!(config.this_kme_config.sqlite_db_path, ":memory:");
+        assert_eq!(config.this_kme_config.delete_key_file_after_read, false);
         assert_eq!(config.this_kme_config.nickname, Some("Alice".to_string()));
         assert_eq!(config.this_kme_config.key_directory_to_watch, "tests/data/raw_keys/kme-1-1");
         assert_eq!(config.this_kme_config.saes_https_interface.listen_address, "127.0.0.1:3000");
@@ -133,6 +137,7 @@ mod tests {
         assert_eq!(config.other_kme_configs[0].id, 2);
         assert_eq!(config.other_kme_configs[0].key_directory_to_watch, "tests/data/raw_keys/kme-1-2");
         assert_eq!(config.other_kme_configs[0].inter_kme_bind_address, "127.0.0.1:4001");
+        assert_eq!(config.other_kme_configs[0].ignore_system_proxy_settings, None);
         assert_eq!(config.other_kme_configs[0].https_client_authentication_certificate, "certs/inter_kmes/client-kme1-to-kme2.pfx");
         assert_eq!(config.other_kme_configs[0].https_client_authentication_certificate_password, "");
         assert_eq!(config.sae_configs.len(), 3);
@@ -152,7 +157,7 @@ mod tests {
         const JSON_CONFIG_PATH: &'static str = "tests/data/test_kme_config_json_error.json5";
         let config = Config::from_json_path(JSON_CONFIG_PATH);
         assert!(config.is_err());
-        assert_eq!(config.unwrap_err().to_string(), "Error deserializing JSON");
+        assert!(config.err().unwrap().to_string().contains("Error deserializing JSON"));
     }
 
     #[test]

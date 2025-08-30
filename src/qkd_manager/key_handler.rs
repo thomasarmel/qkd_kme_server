@@ -187,8 +187,10 @@ impl KeyHandler {
     /// * `kme_id` - The KME ID to associate with the SAE ID
     /// * `sae_certificate_serial` - The SAE certificate serial number, None if the SAE isn't supposed to authenticate to this KME
     async fn add_sae(&self, sae_id: SaeId, kme_id: KmeId, sae_certificate_serial: &Option<SaeClientCertSerial>) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const PREPARED_STATEMENT_KNOWN_CERT: &'static str = "INSERT INTO saes (sae_id, kme_id, sae_certificate_serial) VALUES (?, ?, ?);";
-        const PREPARED_STATEMENT_NO_CERT: &'static str = "INSERT INTO saes (sae_id, kme_id) VALUES (?, ?);";
+        const PREPARED_INSERT_STATEMENT_KNOWN_CERT: &'static str = "INSERT INTO saes (sae_id, kme_id, sae_certificate_serial) VALUES (?, ?, ?);";
+        const PREPARED_INSERT_STATEMENT_NO_CERT: &'static str = "INSERT INTO saes (sae_id, kme_id) VALUES (?, ?);";
+        const PREPARED_UPDATE_STATEMENT_KNOWN_CERT: &'static str = "UPDATE saes SET kme_id = ?, sae_certificate_serial = ? WHERE sae_id = ?;";
+        const PREPARED_UPDATE_STATEMENT_NO_CERT: &'static str = "UPDATE saes SET kme_id = ?, sae_certificate_serial = NULL WHERE sae_id = ?;";
 
         let has_provided_certificate = sae_certificate_serial.is_some();
         let is_this_kme = kme_id == self.this_kme_id;
@@ -197,22 +199,55 @@ impl KeyHandler {
             return Err(QkdManagerResponse::InconsistentSaeData);
         }
 
-        let statement = match sae_certificate_serial {
-            Some(_) => PREPARED_STATEMENT_KNOWN_CERT,
-            None => PREPARED_STATEMENT_NO_CERT,
+        let insert_statement = match sae_certificate_serial {
+            Some(_) => PREPARED_INSERT_STATEMENT_KNOWN_CERT,
+            None => PREPARED_INSERT_STATEMENT_NO_CERT,
         };
 
-        let stmt = ensure_prepared_statement_ok!(self.db, statement)?;
-        let mut query_args = prepare_sql_arguments!(sae_id, kme_id)?;
+        let update_statement = match sae_certificate_serial {
+            Some(_) => PREPARED_UPDATE_STATEMENT_KNOWN_CERT,
+            None => PREPARED_UPDATE_STATEMENT_NO_CERT,
+        };
+
+        let mut query_args_update = prepare_sql_arguments!(kme_id)?;
 
         if sae_certificate_serial.is_some() {
-            query_args.add(sae_certificate_serial.as_ref().unwrap().as_bytes()).map_err(|_| {
+            query_args_update.add(sae_certificate_serial.as_ref().unwrap().as_bytes()).map_err(|_| {
                 error!("Error binding parameter to SQL statement");
                 QkdManagerResponse::Ko
             })?;
         }
-        stmt.query_with(query_args).execute(&self.db).await.map_err(|_| {
-            error!("Error executing SQL statement");
+        query_args_update.add(sae_id).map_err(|_| {
+            error!("Error binding parameter to SQL statement");
+            QkdManagerResponse::Ko
+        })?;
+
+        let update_stmt = ensure_prepared_statement_ok!(self.db, update_statement)?;
+        let update_query_affected_rows = update_stmt.query_with(query_args_update).execute(&self.db).await.map_err(|e| {
+            error!("Error executing SQL statement: {:?}", e);
+            QkdManagerResponse::Ko
+        })?.rows_affected();
+
+        if update_query_affected_rows > 1 {
+            error!("Error: more than one row affected when updating SAE ID {}", sae_id);
+            return Err(QkdManagerResponse::Ko);
+        } else if update_query_affected_rows == 1 {
+            // Successfully updated existing SAE ID
+            return Ok(QkdManagerResponse::Ok);
+        }
+
+        let mut query_args_insert = prepare_sql_arguments!(sae_id, kme_id)?;
+
+        if sae_certificate_serial.is_some() {
+            query_args_insert.add(sae_certificate_serial.as_ref().unwrap().as_bytes()).map_err(|_| {
+                error!("Error binding parameter to SQL statement");
+                QkdManagerResponse::Ko
+            })?;
+        }
+
+        let insert_stmt = ensure_prepared_statement_ok!(self.db, insert_statement)?;
+        insert_stmt.query_with(query_args_insert).execute(&self.db).await.map_err(|e| {
+            error!("Error executing SQL statement: {:?}", e);
             QkdManagerResponse::Ko
         })?;
         Ok(QkdManagerResponse::Ok)
@@ -679,8 +714,8 @@ impl KeyHandler {
 #[macro_export]
 macro_rules! ensure_prepared_statement_ok {
     ($sql_connection:expr, $statement:expr) => {
-        $sql_connection.prepare($statement).await.map_err(|_| {
-            error!("Error preparing SQL statement");
+        $sql_connection.prepare($statement).await.map_err(|e| {
+            error!("Error preparing SQL statement: {:?}", e);
             QkdManagerResponse::Ko
         })
     }
@@ -761,6 +796,31 @@ mod tests {
             self.events.lock().unwrap().push(message.to_string());
             Ok(())
         }
+    }
+
+    #[tokio::test]
+    async fn test_add_sae() {
+        let (_, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, _) = crossbeam_channel::unbounded();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, None).await.unwrap();
+        let sae_certificate_serial = vec![0u8; CLIENT_CERT_SERIAL_SIZE_BYTES];
+        let recv = key_handler.add_sae(1, 1, &Some(sae_certificate_serial.clone())).await.unwrap();
+        assert_eq!(recv, QkdManagerResponse::Ok);
+
+        let recv = key_handler.add_sae(2, 1, &None).await.unwrap_err();
+        assert_eq!(recv, QkdManagerResponse::InconsistentSaeData); // Must provide a client certificate if belongs to this SAE
+
+        let recv = key_handler.add_sae(2, 2, &Some(sae_certificate_serial.clone())).await.unwrap_err();
+        assert_eq!(recv, QkdManagerResponse::InconsistentSaeData); // Must not provide a client certificate if doesn't belong to this SAE
+
+        let recv = key_handler.add_sae(2, 2, &None).await.unwrap();
+        assert_eq!(recv, QkdManagerResponse::Ok);
+
+        // Adding same SAE twice should not fail, it should just get ignored:
+        let recv = key_handler.add_sae(1, 1, &Some(sae_certificate_serial.clone())).await.unwrap();
+        assert_eq!(recv, QkdManagerResponse::Ok);
+        let recv = key_handler.add_sae(2, 2, &None).await.unwrap();
+        assert_eq!(recv, QkdManagerResponse::Ok);
     }
 
     #[tokio::test]
