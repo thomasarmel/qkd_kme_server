@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::qkd_manager::{PreInitQkdKeyWrapper, QkdManager};
-use crate::{io_err, KmeId};
+use crate::{io_err, KmeId, QKD_KEY_SIZE_BYTES};
 use log::error;
 use notify::event::{AccessKind, AccessMode};
 use notify::{EventKind, RecursiveMode, Watcher};
@@ -85,16 +85,21 @@ impl ConfigExtractor {
 
 
     fn extract_all_keys_from_file(qkd_manager: Arc<QkdManager>, file_path: &str, other_kme_id: i64) -> Result<(), io::Error> {
-        if !std::fs::metadata(file_path).map_err(|e|
+        let key_file_metadata = std::fs::metadata(file_path).map_err(|e|
             io_err(&format!("Cannot read file metadata: {:?}", e))
-        )?.is_file() {
+        )?;
+        if !key_file_metadata.is_file() {
             return Err(io_err("Path is not a file"));
         }
         let file = std::fs::File::open(file_path).map_err(|e|
             io_err(&format!("Cannot open file: {:?}", e))
         )?;
-        let mut reader = BufReader::with_capacity(32, file);
-        let mut buffer = [0; 32];
+
+        let keys_count = key_file_metadata.len() / QKD_KEY_SIZE_BYTES as u64;
+
+        let mut reader = BufReader::with_capacity(QKD_KEY_SIZE_BYTES, file);
+        let mut buffer = [0; QKD_KEY_SIZE_BYTES];
+        let mut qkd_keys = Vec::with_capacity(keys_count as usize);
         while let Ok(_) = reader.read_exact(&mut buffer) {
             let qkd_key = PreInitQkdKeyWrapper::new(
                 other_kme_id,
@@ -102,10 +107,11 @@ impl ConfigExtractor {
             ).map_err(|e|
                 io_err(&format!("Cannot create QKD key: {:?}", e))
             )?;
-            qkd_manager.add_pre_init_qkd_key(qkd_key).map_err(|e|
-                io_err(&format!("Cannot import QKD key: {:?}", e))
-            )?;
+            qkd_keys.push(qkd_key);
         }
+        qkd_manager.add_multiple_pre_init_qkd_keys(qkd_keys).map_err(|e|
+            io_err(&format!("Cannot import QKD keys from file: {:?}", e))
+        )?;
         Ok(())
     }
 

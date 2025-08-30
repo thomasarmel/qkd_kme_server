@@ -49,6 +49,39 @@ pub fn setup() {
     tokio::spawn(async move {server.run(&qkd_manager).await.unwrap();});
 }
 
+pub fn setup_all_keys_inserted_at_once() {
+    let server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
+        "127.0.0.1:3000",
+        "certs/zone1/CA-zone1.crt",
+        "certs/zone1/kme1.crt",
+        "certs/zone1/kme1.key",
+    );
+
+    let qkd_manager = QkdManager::new(":memory:", 1, &Some("Alice".to_string()));
+    qkd_manager.add_sae(1,
+                        1,
+                        &Some(vec![0x70, 0xf4, 0x4f, 0x56, 0x0c, 0x3f, 0x27, 0xd4, 0xb2, 0x11, 0xa4, 0x78, 0x13, 0xaf, 0xd0, 0x3c, 0x03, 0x81, 0x3b, 0x8e])
+    ).unwrap();
+
+    let qkd_key_1 = PreInitQkdKeyWrapper::new(
+        1,
+        b"this_is_secret_key_1_of_32_bytes",
+    ).unwrap();
+
+    let qkd_key_2 = PreInitQkdKeyWrapper::new(
+        1,
+        b"this_is_secret_key_1_of_32_bytes",
+    ).unwrap();
+
+    let qkd_key_3 = PreInitQkdKeyWrapper::new(
+        1,
+        b"this_is_secret_key_3_of_32_bytes",
+    ).unwrap();
+    qkd_manager.add_multiple_pre_init_qkd_keys(vec![qkd_key_1, qkd_key_2, qkd_key_3]).unwrap();
+
+    tokio::spawn(async move {server.run(&qkd_manager).await.unwrap();});
+}
+
 pub fn setup_lot_of_stored_keys() {
     let server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
         "127.0.0.1:3000",
@@ -71,6 +104,35 @@ pub fn setup_lot_of_stored_keys() {
 
         qkd_manager.add_pre_init_qkd_key(qkd_key).unwrap();
     }
+
+    tokio::spawn(async move {server.run(&qkd_manager).await.unwrap();});
+}
+
+pub fn setup_lot_of_stored_keys_inserted_at_once() {
+    let server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
+        "127.0.0.1:3000",
+        "certs/zone1/CA-zone1.crt",
+        "certs/zone1/kme1.crt",
+        "certs/zone1/kme1.key",
+    );
+
+    let qkd_manager = QkdManager::new(":memory:", 1, &Some("Alice".to_string()));
+    qkd_manager.add_sae(1,
+                        1,
+                        &Some(vec![0x70, 0xf4, 0x4f, 0x56, 0x0c, 0x3f, 0x27, 0xd4, 0xb2, 0x11, 0xa4, 0x78, 0x13, 0xaf, 0xd0, 0x3c, 0x03, 0x81, 0x3b, 0x8e])
+    ).unwrap();
+
+    let mut keys = Vec::with_capacity(1024);
+
+    for _ in 0..1024 {
+        let qkd_key = PreInitQkdKeyWrapper::new(
+            1,
+            b"this_is_secret_key_1_of_32_bytes",
+        ).unwrap();
+        keys.push(qkd_key);
+    }
+
+    qkd_manager.add_multiple_pre_init_qkd_keys(keys).unwrap();
 
     tokio::spawn(async move {server.run(&qkd_manager).await.unwrap();});
 }

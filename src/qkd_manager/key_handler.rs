@@ -11,7 +11,7 @@ use base64::{engine::general_purpose, Engine as _};
 use futures::future::join_all;
 use futures::{TryFutureExt, TryStreamExt};
 use log::{error, info, warn};
-use sqlx::{Arguments, Executor, Row, Statement};
+use sqlx::{Arguments, Executor, QueryBuilder, Row, Statement};
 use std::convert::identity;
 use std::sync::Arc;
 use std::{io, vec};
@@ -89,6 +89,15 @@ impl KeyHandler {
                                 error!("Error QKD manager sending response");
                             }
                         },
+                        // Insert multiple keys into the database, each time a QKD exchange occurs
+                        QkdManagerCommand::AddMultiplePreInitKeys(keys) => {
+                            for key in &keys {
+                                info!("Adding key for KME ID {} and {}", self.this_kme_id, key.other_kme_id);
+                            }
+                            if self.response_tx.send(self.add_multiple_preinit_qkd_keys(keys).await.unwrap_or_else(identity)).is_err() {
+                                error!("Error QKD manager sending response");
+                            }
+                        }
                         // The master SAE asks for keys ready to be sent to the slave SAE
                         QkdManagerCommand::GetKeys(sae_certificate_serial, slave_sae_id, keys_count) => {
                             info!("Getting key for SAE ID {}", slave_sae_id);
@@ -223,6 +232,34 @@ impl KeyHandler {
             error!("Error executing SQL statement");
             QkdManagerResponse::Ko
         })?;
+        Ok(QkdManagerResponse::Ok)
+    }
+
+    async fn add_multiple_preinit_qkd_keys(&self, pre_init_keys: Vec<PreInitQkdKeyWrapper>) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        const PREPARED_STATEMENT: &'static str = "INSERT INTO uninit_keys (key_uuid, key, other_kme_id) "; // QueryBuilder will add the VALUES part
+
+        let mut qb = QueryBuilder::new(PREPARED_STATEMENT);
+
+        let pre_init_keys_transformed = pre_init_keys.iter().map(|pre_init_key| {
+            let uuid_bytes = Bytes::try_from(pre_init_key.key_uuid).map_err(|_| {
+                error!("Error converting UUID to bytes");
+                QkdManagerResponse::Ko
+            })?;
+            let uuid_str = uuid::Uuid::from_bytes(uuid_bytes).to_string();
+            Ok((uuid_str, pre_init_key.key.as_bytes(), pre_init_key.other_kme_id))
+        }).collect::<Result<Vec<_>, QkdManagerResponse>>()?;
+
+        qb.push_values(pre_init_keys_transformed, |mut b, (uuid_str, key_bytes, other_kme_id)| {
+            b.push_bind(uuid_str)
+                .push_bind(key_bytes)
+                .push_bind(other_kme_id);
+        });
+        let query = qb.build();
+        query.execute(&self.db).await.map_err(|e| {
+            error!("Error executing SQL statement: {:?}", e);
+            QkdManagerResponse::Ko
+        })?;
+
         Ok(QkdManagerResponse::Ok)
     }
 
@@ -755,6 +792,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_add_multiple_preinit_qkd_keys() {
+        let (_, command_channel_rx) = crossbeam_channel::unbounded();
+        let (response_channel_tx, _) = crossbeam_channel::unbounded();
+        let key_handler = super::KeyHandler::new(":memory:", command_channel_rx, response_channel_tx, 1, None).await.unwrap();
+        let keys = vec![
+            crate::qkd_manager::PreInitQkdKeyWrapper {
+                other_kme_id: 1,
+                key_uuid: *uuid::Uuid::from_bytes([0u8; 16]).as_bytes(),
+                key: [0u8; crate::QKD_KEY_SIZE_BITS / 8],
+            },
+            crate::qkd_manager::PreInitQkdKeyWrapper {
+                other_kme_id: 2,
+                key_uuid: *uuid::Uuid::from_bytes([1u8; 16]).as_bytes(),
+                key: [1u8; crate::QKD_KEY_SIZE_BITS / 8],
+            },
+            crate::qkd_manager::PreInitQkdKeyWrapper {
+                other_kme_id: 3,
+                key_uuid: *uuid::Uuid::from_bytes([2u8; 16]).as_bytes(),
+                key: [2u8; crate::QKD_KEY_SIZE_BITS / 8],
+            },
+        ];
+        key_handler.add_multiple_preinit_qkd_keys(keys).await.unwrap();
+    }
+
+    #[tokio::test]
     async fn test_get_sae_status() {
         let (_, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, _) = crossbeam_channel::unbounded();
@@ -1136,7 +1198,7 @@ mod tests {
         assert_eq!(qkd_manager_response, QkdManagerResponse::SaeInfo(super::SAEInfo {
             sae_id,
             kme_id,
-            sae_certificate_serial,
+            sae_certificate_serial: sae_certificate_serial.clone(),
         }));
 
         command_tx.send(super::QkdManagerCommand::GetSaeInfoFromCertificate(vec![2u8; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
@@ -1169,5 +1231,40 @@ mod tests {
         assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
 
         assert_eq!(subscriber.events.lock().unwrap().len(), 1);
+
+        command_tx.send(super::QkdManagerCommand::GetKeys(sae_certificate_serial.clone(), sae_id, RequestedKeyCount::new(1).unwrap())).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
+
+        command_tx.send(super::QkdManagerCommand::GetKeys(sae_certificate_serial.clone(), sae_id, RequestedKeyCount::new(1).unwrap())).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert_eq!(qkd_manager_response, QkdManagerResponse::NotFound);
+
+        // add multiple keys
+        let key1 = crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
+            key_uuid: *uuid::Uuid::from_bytes([1u8; 16]).as_bytes(),
+            key: [1u8; crate::QKD_KEY_SIZE_BITS / 8],
+        };
+        let key2 = crate::qkd_manager::PreInitQkdKeyWrapper {
+            other_kme_id: 1,
+            key_uuid: *uuid::Uuid::from_bytes([2u8; 16]).as_bytes(),
+            key: [2u8; crate::QKD_KEY_SIZE_BITS / 8],
+        };
+        command_tx.send(super::QkdManagerCommand::AddMultiplePreInitKeys(vec![key1, key2])).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
+
+        command_tx.send(super::QkdManagerCommand::GetKeys(sae_certificate_serial.clone(), sae_id, RequestedKeyCount::new(1).unwrap())).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
+
+        command_tx.send(super::QkdManagerCommand::GetKeys(sae_certificate_serial.clone(), sae_id, RequestedKeyCount::new(1).unwrap())).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert!(matches!(qkd_manager_response, QkdManagerResponse::Keys(_)));
+
+        command_tx.send(super::QkdManagerCommand::GetKeys(sae_certificate_serial.clone(), sae_id, RequestedKeyCount::new(1).unwrap())).unwrap();
+        let qkd_manager_response = response_rx.recv().unwrap();
+        assert_eq!(qkd_manager_response, QkdManagerResponse::NotFound);
     }
 }

@@ -3,6 +3,7 @@ pub(crate) trait EntropyAccumulator {
     fn get_entropy(&self) -> f64;
 }
 
+#[derive(Debug, Copy, Clone)]
 pub(crate) struct ShannonEntropyAccumulator {
     /// Counter for each byte value
     bytes_counter: [u64; 256],

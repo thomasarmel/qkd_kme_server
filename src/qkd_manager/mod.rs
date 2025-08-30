@@ -112,6 +112,35 @@ impl QkdManager {
         Ok(EXPECTED_QKD_MANAGER_RESPONSE)
     }
 
+    /// Add multiple new QKD keys to the database
+    /// Increases the total entropy of all keys in the database
+    /// # Arguments
+    /// * `keys` - The QKD keys to add (key + origin SAE ID + target SAE ID)
+    /// # Returns
+    /// Ok if the keys were added successfully, an error otherwise
+    pub fn add_multiple_pre_init_qkd_keys(&self, keys: Vec<PreInitQkdKeyWrapper>) -> Result<QkdManagerResponse, QkdManagerResponse> {
+        const EXPECTED_QKD_MANAGER_RESPONSE: QkdManagerResponse = QkdManagerResponse::Ok;
+
+        let mut cloned_shannon_entropy_calculator = self.shannon_entropy_calculator.lock().map_err(|_| {
+            TransmissionError
+        })?.clone();
+        for k in keys.iter() {
+            cloned_shannon_entropy_calculator.add_bytes(&k.key);
+        }
+
+        self.command_tx.send(QkdManagerCommand::AddMultiplePreInitKeys(keys)).map_err(|_| {
+            TransmissionError
+        })?;
+        let add_keys_status = self.response_rx.recv().map_err(|_| {
+            TransmissionError
+        })?;
+        if add_keys_status != EXPECTED_QKD_MANAGER_RESPONSE {
+            return Err(add_keys_status);
+        }
+        *self.shannon_entropy_calculator.lock().unwrap() = cloned_shannon_entropy_calculator;
+        Ok(EXPECTED_QKD_MANAGER_RESPONSE)
+    }
+
     /// Get a QKD key from the database (shall be called by the master SAE)
     /// # Arguments
     /// * `target_sae_id` - The ID of the target (slave) SAE, to which master SAE wants to communicate
@@ -378,6 +407,8 @@ pub struct KMEInfo {
 enum QkdManagerCommand {
     /// Add a new pre-init QKD key to the database: it will be available for SAEs to request it if there are connected to the right KMEs
     AddPreInitKey(PreInitQkdKeyWrapper),
+    /// Add new pre-init QKD keys to the database: it will be available for SAEs to request it if there are connected to the right KMEs
+    AddMultiplePreInitKeys(Vec<PreInitQkdKeyWrapper>),
     /// Get a QKD key from the database (shall be called by the master SAE)
     GetKeys(SaeClientCertSerial, SaeId, RequestedKeyCount), // origin certificate + target id + keys count
     /// Activate a key from a remote KME, after master SAE requested it
@@ -452,6 +483,18 @@ mod test {
         assert!(response.is_ok());
         assert_eq!(response.unwrap(), QkdManagerResponse::Ok);
         assert_eq!(qkd_manager.get_total_keys_shannon_entropy().await.unwrap(), 0.0);
+    }
+
+    #[tokio::test]
+    async fn add_multiple_pre_init_qkd_keys() {
+        const SQLITE_DB_PATH: &'static str = ":memory:";
+        let qkd_manager = super::QkdManager::new(SQLITE_DB_PATH, 1, &Some("Alice".to_string()));
+        let key1 = super::PreInitQkdKeyWrapper::new(1, &[0; crate::QKD_KEY_SIZE_BYTES]).unwrap();
+        let key2 = super::PreInitQkdKeyWrapper::new(1, &[1; crate::QKD_KEY_SIZE_BYTES]).unwrap();
+        let response = qkd_manager.add_multiple_pre_init_qkd_keys(vec![key1, key2]);
+        assert!(response.is_ok());
+        assert_eq!(response.unwrap(), QkdManagerResponse::Ok);
+        assert_eq!(qkd_manager.get_total_keys_shannon_entropy().await.unwrap(), 1.0);
     }
 
     #[tokio::test]
