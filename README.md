@@ -279,6 +279,35 @@ Events displayed look like:
 2024-02-26T08:56:01.690332800Z: [Bob] Key b7a86bdd-c342-5b5f-b10c-c957cb1d8e75 activated between SAEs 2 and 1
 ```
 
+# Building portable binaries
+
+You may want to build portable binaries that can be launch directly on 
+another machine without any further configuration or installation. So that 
+your binary can be launched by non-specialists.
+
+## Windows:
+
+On Windows, `cargo build --release` already produces portable binary that 
+is only linked to DLL files that are present by default on Windows:
+
+![Dependency walker output for Windows binary](assets/dependencies_dll_windows.png)
+
+## Linux:
+
+On Linux, by default `cargo build --release` produces a binary that is linked
+to shared libraries that may not be present on the target machine, like `libc.so`:
+
+![ldd for dynamically linked Linux binary](assets/compile_dynamic_linux.png)
+
+The solution is to build a static binary, linked to `musl` instead of `glibc`:
+
+```bash
+rustup target add x86_64-unknown-linux-musl
+cargo build --release --target=x86_64-unknown-linux-musl
+```
+
+![ldd for statically linked Linux binary](assets/compile_static_linux.png)
+
 # Troubleshooting
 
 Please check the file [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues / FAQ.
