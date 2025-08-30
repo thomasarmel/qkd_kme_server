@@ -118,6 +118,39 @@ For local tests, certificates are pre-generated and stored in the `certs` folder
 
 ### Running
 
+#### Creating local SQLite database
+
+If you want to use a persistent SQLite database (not in-memory), you need to create an empty SQLite database file.
+
+First install SQLite3 command line tool.
+
+**Windows:**
+
+```bash
+winget install SQLite.SQLite
+```
+
+Then restart your terminal to have `sqlite3` command available on the system 
+PATH.
+
+**Linux:**
+
+```bash
+sudo apt install sqlite3
+```
+
+**MacOS:**
+
+```bash
+brew install sqlite
+```
+
+Then create an empty database file:
+
+```bash
+sqlite3 kme_database.db ""
+```
+
 #### QKD key directory
 
 First of all, please ensure there is a directory in both KMEs where the QKD keys are stored.
