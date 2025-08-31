@@ -81,10 +81,11 @@ If you encounter any issue on a platform, please check the [TROUBLESHOOTING.md](
 - :white_check_mark: : Tested.
 - :interrobang: : Could work, but not tested.
 
-| DBMS               | Status             | URI example                        |
-|--------------------|--------------------|------------------------------------|
-| In-memory database | :white_check_mark: | `:memory:`                         |
-| SQLite             | :white_check_mark: | `sqlite://path/to/kme_database.db` |
+| DBMS               | Status               | URI example                                         |
+|--------------------|----------------------|-----------------------------------------------------|
+| In-memory database | :white_check_mark:   | `:memory:`                                          |
+| SQLite             | :white_check_mark:   | `sqlite://path/to/kme_database.db`                  |
+| PostgreSQL         | :white_check_mark:   | `postgres://qkd_user:qkd_password@localhost/qkd_db` |
 
 **Note**: the database or the SQLite file should already exist, but this software can create the tables if there are missing.
 
@@ -97,19 +98,47 @@ Install Rust programming language, as explained at https://www.rust-lang.org/too
 ```bash
 git clone https://github.com/thomasarmel/qkd_kme_server.git
 cd qkd_kme_server
-cargo test
 cargo build --release
 ```
 
-It has been tested for both Linux and Windows.
+The executable will be located at `target/release/qkd_kme_server`.
 
 ### Tests:
 
-You run unit tests with:
+#### Basic tests
+
+You can run unit basic tests with:
 
 ```bash
 cargo test
 ```
+
+#### Persistent databases tests
+
+To run the tests that use connection to a persistent database, follow these steps:
+
+Install Docker following instructions at https://docs.docker.com/engine/install/
+
+Install Docker Compose following instructions at https://docs.docker.com/compose/install/
+
+Start the database services with Docker Compose:
+```bash
+docker compose -f test_database_services_docker_compose.yml up -d
+```
+
+Wait a few seconds for the databases to be ready.
+
+Run the tests that use persistent databases:
+```bash
+cargo test -- --ignored
+```
+
+When you are done, you can stop the database services with:
+```bash
+docker compose -f test_database_services_docker_compose.yml down
+```
+
+### Simple configuration
 
 For a simple proof of concept in local, you can run the software with 
 `config_kme1.json5` and `config_kme2.json5` files as argument for 
