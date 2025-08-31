@@ -1,14 +1,7 @@
-use std::sync::Arc;
+use crate::common::launch_kme_from_config_file;
 use const_format::concatcp;
-use log::error;
 use reqwest::header::CONTENT_TYPE;
 use serial_test::serial;
-use tokio::select;
-use qkd_kme_server::event_subscription::ImportantEventSubscriber;
-use qkd_kme_server::qkd_manager::QkdManager;
-use qkd_kme_server::routes::sae_zone_routes::EtsiSaeQkdRoutesV1;
-use qkd_kme_server::routes::inter_kmes_routes::InterKMEsRoutes;
-use qkd_kme_server::server::log_http_server::LoggingHttpServer;
 
 mod common;
 
@@ -96,54 +89,4 @@ async fn test_key_transfer_from_file_config() {
     assert!(text_log_message.contains("[Alice] Key 2ae3e385-4e51-7458-b1c1-69066a4cb6d7 activated between SAEs 1 and 3"));
     assert!(text_log_message.contains("[Alice] Key 9768257a-1c59-d255-a93d-d4bb1b693651 activated between SAEs 3 and 1"));
     assert!(text_log_message.contains("[Alice] SAE 1 requested key 9768257a-1c59-d255-a93d-d4bb1b693651 (from 3)"));
-}
-
-// Quite similar to program's main function
-async fn launch_kme_from_config_file(config_file_path: &str) {
-    let config = qkd_kme_server::config::Config::from_json_path(config_file_path).unwrap();
-
-    let sae_https_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
-        &config.this_kme_config.saes_https_interface.listen_address,
-        &config.this_kme_config.saes_https_interface.ca_client_cert_path,
-        &config.this_kme_config.saes_https_interface.server_cert_path,
-        &config.this_kme_config.saes_https_interface.server_key_path,
-    );
-
-    let inter_kme_https_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
-        &config.this_kme_config.kmes_https_interface.listen_address,
-        &config.this_kme_config.kmes_https_interface.ca_client_cert_path,
-        &config.this_kme_config.kmes_https_interface.server_cert_path,
-        &config.this_kme_config.kmes_https_interface.server_key_path,
-    );
-
-    let qkd_manager = QkdManager::from_config(&config);
-    let qkd_manager = qkd_manager.unwrap();
-
-    match config.this_kme_config.debugging_http_interface {
-        Some(listen_addr) => {
-            let logging_http_server = Arc::new(LoggingHttpServer::new(&listen_addr));
-            qkd_manager.add_important_event_subscriber(Arc::clone(&logging_http_server) as Arc<dyn ImportantEventSubscriber>).unwrap();
-            select! {
-                x = inter_kme_https_server.run(&qkd_manager) => {
-                    error!("Error running inter-KMEs HTTPS server: {:?}", x);
-                },
-                x = sae_https_server.run(&qkd_manager) => {
-                    error!("Error running SAEs HTTPS server: {:?}", x);
-                },
-                x = logging_http_server.run() => {
-                    error!("Error running logging HTTP server: {:?}", x);
-                }
-            }
-        },
-        None => {
-            select! {
-                x = inter_kme_https_server.run(&qkd_manager) => {
-                    error!("Error running inter-KMEs HTTPS server: {:?}", x);
-                },
-                x = sae_https_server.run(&qkd_manager) => {
-                    error!("Error running SAEs HTTPS server: {:?}", x);
-                }
-            }
-        }
-    }
 }
