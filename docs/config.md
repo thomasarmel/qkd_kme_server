@@ -25,10 +25,13 @@ This object describes the KME itself
   The nickname will appear on the logs in the web UI. If the nickname is 
    not set, the web UI will display "`KME {ID}`".
 
-- **`sqlite_db_path`** *(string)*  
-  Path to the SQLite database file.
+- **`db_uri`** *(string)*  
+  URI of the database to store the QKD keys and SAE registrations 
+  (like "`sqlite://path/to/file.db`").
+  
   The software will create the tables if they do not exist.
-  You can specify "`:memory:`" to use an in-memory database.
+
+  Use "`:memory:`" to use an in-memory database.
 
 - **`delete_key_file_after_read`** *(boolean)*  
   If set to `true`, the software will delete the QKD key files after reading them.

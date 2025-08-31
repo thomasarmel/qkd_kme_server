@@ -1,6 +1,6 @@
 //! QKD manager key handler, supposed to run in a separate thread
 
-use crate::ensure_prepared_statement_ok;
+use crate::{ensure_prepared_statement_ok, MEMORY_SQLITE_DB_PATH};
 use crate::event_subscription::ImportantEventSubscriber;
 use crate::export_important_logging_message;
 use crate::prepare_sql_arguments;
@@ -15,7 +15,7 @@ use sqlx::{Arguments, Executor, QueryBuilder, Row, Statement};
 use std::convert::identity;
 use std::sync::Arc;
 use std::{io, vec};
-use sqlx::sqlite::SqliteArguments;
+use sqlx::any::{AnyArguments, AnyPoolOptions};
 use uuid::Bytes;
 use x509_parser::nom::AsBytes;
 
@@ -26,7 +26,7 @@ pub(super) struct KeyHandler {
     /// Channel to send responses to the QKD manager (main thread)
     response_tx: crossbeam_channel::Sender<QkdManagerResponse>,
     /// Connection to the sqlite database (in memory or on disk)
-    db: sqlx::Pool<sqlx::Sqlite>,
+    db: sqlx::AnyPool,
     /// The ID of this KME
     this_kme_id: KmeId,
     /// Router on classical network, used to connect to other KMEs over unsecure classical network
@@ -52,14 +52,31 @@ impl KeyHandler {
     /// If the sqlite database cannot be opened or if the tables cannot be created
     pub(super) async fn new(db_uri: &str, command_rx: crossbeam_channel::Receiver<QkdManagerCommand>, response_tx: crossbeam_channel::Sender<QkdManagerResponse>, this_kme_id: KmeId, kme_nickname: Option<String>) -> Result<Self, io::Error> {
         const DATABASE_INIT_REQ: &'static str = include_str!("init_qkd_database.sql");
+        const IN_MEMORY_SQLITE_URI: &'static str = "sqlite::memory:";
+
+        sqlx::any::install_default_drivers();
+
+        let in_memory_database = db_uri == MEMORY_SQLITE_DB_PATH;
+
+        let dbpool = AnyPoolOptions::new();
+        let dbpool = if in_memory_database {
+            dbpool
+                .max_connections(1) // In memory database works only with a single connection
+                .idle_timeout(None)
+                .max_lifetime(None)
+                .connect(IN_MEMORY_SQLITE_URI)
+                .await
+        } else {
+            dbpool.connect_lazy(db_uri) // Save costs on Cloud bill
+        }
+            .map_err(|e| {
+                io::Error::new(io::ErrorKind::NotConnected, format!("Error opening database: {:?}", e))
+            })?;
 
         let key_handler = Self {
             command_rx,
             response_tx,
-            // Open the sqlite database
-            db: sqlx::Pool::connect(db_uri).await.map_err(|e| {
-                io::Error::new(io::ErrorKind::NotConnected, format!("Error opening sqlite database: {:?}", e))
-            })?,
+            db: dbpool,
             this_kme_id,
             qkd_router: router::QkdRouter::new(),
             event_notification_subscribers: vec![],
@@ -212,13 +229,13 @@ impl KeyHandler {
         let mut query_args_update = prepare_sql_arguments!(kme_id)?;
 
         if sae_certificate_serial.is_some() {
-            query_args_update.add(sae_certificate_serial.as_ref().unwrap().as_bytes()).map_err(|_| {
-                error!("Error binding parameter to SQL statement");
+            query_args_update.add(sae_certificate_serial.as_ref().unwrap().as_bytes()).map_err(|e| {
+                error!("Error binding parameter to SQL statement: {}", e);
                 QkdManagerResponse::Ko
             })?;
         }
-        query_args_update.add(sae_id).map_err(|_| {
-            error!("Error binding parameter to SQL statement");
+        query_args_update.add(sae_id).map_err(|e| {
+            error!("Error binding parameter to SQL statement: {}", e);
             QkdManagerResponse::Ko
         })?;
 
@@ -730,12 +747,12 @@ macro_rules! ensure_prepared_statement_ok {
 macro_rules! prepare_sql_arguments {
     ($( $arg:expr ),* $(,)? ) => {
         {
-            let mut query_args = SqliteArguments::default();
+            let mut query_args = AnyArguments::default();
             let mut result: Result<_, QkdManagerResponse> = Ok(());
             $(
                 if result.is_ok(){
-                    if let Err(_) = query_args.add($arg) {
-                        error!("Error binding parameter to SQL statement");
+                    if let Err(e) = query_args.add($arg) {
+                        error!("Error binding parameter to SQL statement: {}", e);
                         result = Err(QkdManagerResponse::Ko);
                     }
                 }
@@ -1214,14 +1231,15 @@ mod tests {
                 key_handler.run().await;
             });
         });
+        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 
         command_tx.send(super::QkdManagerCommand::AddSae(sae_id, kme_id, Some(sae_certificate_serial.clone()))).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
-        assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::Ok);
 
         command_tx.send(super::QkdManagerCommand::GetKeys(sae_certificate_serial.clone(), sae_id, RequestedKeyCount::new(1).unwrap())).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
-        assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::NotFound);
 
         // add key
         let key = crate::qkd_manager::PreInitQkdKeyWrapper {
@@ -1231,22 +1249,22 @@ mod tests {
         };
         command_tx.send(super::QkdManagerCommand::AddPreInitKey(key)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
-        assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::Ok);
 
         command_tx.send(super::QkdManagerCommand::GetKeysWithIds(sae_certificate_serial.clone(), 1, vec!["00000000-0000-0000-0000-000000000000".to_string()])).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
-        assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::NotFound);
 
         assert_eq!(subscriber.events.lock().unwrap().len(), 1);
         assert_eq!(subscriber.events.lock().unwrap()[0], "[Alice] SAE 1 requested a key to communicate with 1");
 
         command_tx.send(super::QkdManagerCommand::GetStatus(sae_certificate_serial.clone(), 2)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
-        assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::NotFound);
 
         command_tx.send(super::QkdManagerCommand::AddSae(2, kme_id, Some(vec![1u8; CLIENT_CERT_SERIAL_SIZE_BYTES]))).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
-        assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::Ok);
 
         command_tx.send(super::QkdManagerCommand::GetStatus(sae_certificate_serial.clone(), 2)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
@@ -1263,7 +1281,7 @@ mod tests {
 
         command_tx.send(super::QkdManagerCommand::GetSaeInfoFromCertificate(vec![2u8; CLIENT_CERT_SERIAL_SIZE_BYTES])).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
-        assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::NotFound);
 
         command_tx.send(super::QkdManagerCommand::GetKmeIdFromSaeId(sae_id)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
@@ -1273,7 +1291,7 @@ mod tests {
         }));
         command_tx.send(super::QkdManagerCommand::GetKmeIdFromSaeId(3)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
-        assert!(matches!(qkd_manager_response, QkdManagerResponse::NotFound));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::NotFound);
 
         command_tx.send(super::QkdManagerCommand::AddKmeClassicalNetInfo(kme_id,
                                                                          String::from("wrong_data"),
@@ -1281,14 +1299,14 @@ mod tests {
                                                                          String::from("wrong_data"),
                                                                          true)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
-        assert!(matches!(qkd_manager_response, QkdManagerResponse::Ko));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::Ko);
         command_tx.send(super::QkdManagerCommand::AddKmeClassicalNetInfo(kme_id,
                                                                          String::from("test.fr:1234"),
                                                                          String::from(KME1_TO_KME2_CLIENT_AUTH_CERT_PATH),
                                                                          String::from(""),
                                                                          true)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
-        assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::Ok);
 
         assert_eq!(subscriber.events.lock().unwrap().len(), 1);
 
@@ -1313,7 +1331,7 @@ mod tests {
         };
         command_tx.send(super::QkdManagerCommand::AddMultiplePreInitKeys(vec![key1, key2])).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
-        assert!(matches!(qkd_manager_response, QkdManagerResponse::Ok));
+        assert_eq!(qkd_manager_response, QkdManagerResponse::Ok);
 
         command_tx.send(super::QkdManagerCommand::GetKeys(sae_certificate_serial.clone(), sae_id, RequestedKeyCount::new(1).unwrap())).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();

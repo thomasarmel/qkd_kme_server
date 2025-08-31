@@ -2,7 +2,7 @@
   "this_kme": {
     "id": 1, // KME id over KME network
     "nickname": "Alice", // Optional KME nickname for logging
-    "sqlite_db_path": ":memory:", // SQLite db is in memory (could be a filename as well)
+    "db_uri": ":memory:", // SQLite db is in memory (could be a filename as well)
     "delete_key_file_after_read": false, // Whether to delete key files after reading them (for in-memory database, set to false)
     "key_directory_to_watch": "raw_keys/kme-1-1", // Quantum Key directory for SAEs belonging to this KME (only to be compliant with standard, as these SAEs can use public key cryptography directly)
     "saes_https_interface": {

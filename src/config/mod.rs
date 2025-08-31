@@ -39,9 +39,9 @@ pub struct ThisKmeConfig {
     pub(crate) id: KmeId,
     /// Optional nickname for this KME, used for debugging purposes (eg "Alice" or "Bob")
     pub(crate) nickname: Option<String>,
-    /// Path to SQLite database file, used to store keys, certificates and other data
+    /// URI of database used to store keys, certificates and other data
     /// You can use `:memory:` to use in-memory database
-    pub(crate) sqlite_db_path: String,
+    pub(crate) db_uri: String,
     /// If true, the KME will delete QKD key files after reading keys and adding them to the database.
     /// You should probably set it to `true` when using persistent storage, and to `false` when using an in-memory database.
     pub(crate) delete_key_file_after_read: bool,
@@ -120,7 +120,7 @@ mod tests {
         const JSON_CONFIG_PATH: &'static str = "tests/data/test_kme_config.json5";
         let config = Config::from_json_path(JSON_CONFIG_PATH).unwrap();
         assert_eq!(config.this_kme_config.id, 1);
-        assert_eq!(config.this_kme_config.sqlite_db_path, ":memory:");
+        assert_eq!(config.this_kme_config.db_uri, ":memory:");
         assert_eq!(config.this_kme_config.delete_key_file_after_read, false);
         assert_eq!(config.this_kme_config.nickname, Some("Alice".to_string()));
         assert_eq!(config.this_kme_config.key_directory_to_watch, "tests/data/raw_keys/kme-1-1");

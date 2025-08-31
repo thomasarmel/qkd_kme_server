@@ -13,7 +13,7 @@ pub(super) struct ConfigExtractor {}
 
 impl ConfigExtractor {
     pub(super) fn extract_config_to_qkd_manager(config: &Config) -> Result<Arc<QkdManager>, io::Error> {
-        let qkd_manager = Arc::new(QkdManager::new(&config.this_kme_config.sqlite_db_path, config.this_kme_config.id, &config.this_kme_config.nickname));
+        let qkd_manager = Arc::new(QkdManager::new(&config.this_kme_config.db_uri, config.this_kme_config.id, &config.this_kme_config.nickname));
         Self::extract_all_saes(Arc::clone(&qkd_manager), config)?;
         Self::extract_other_kmes_and_keys(Arc::clone(&qkd_manager), config)?;
         Self::add_classical_net_routing_info_kmes(Arc::clone(&qkd_manager), config)?;

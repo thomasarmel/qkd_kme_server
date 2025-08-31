@@ -1,7 +1,7 @@
 {
   "this_kme": {
     "id": 2,
-    "sqlite_db_path": ":memory:",
+    "db_uri": ":memory:",
     "delete_key_file_after_read": false,
     "key_directory_to_watch": "tests/data/raw_keys/kme-2-2",
     "saes_https_interface": {
