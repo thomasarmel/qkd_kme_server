@@ -1,0 +1,9 @@
+services:
+  postgresql:
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: qkd_db
+      POSTGRES_USER: qkd_user
+      POSTGRES_PASSWORD: qkd_password

@@ -57,8 +57,8 @@ impl QkdManager {
             rt.block_on(async move {
                 let mut key_handler = match key_handler::KeyHandler::new(&db_uri, command_rx, response_tx, this_kme_id, nickname.to_owned()).await {
                     Ok(handler) => handler,
-                    Err(_) => {
-                        error!("Error creating key handler");
+                    Err(e) => {
+                        error!("Error creating key handler: {}", e);
                         return;
                     }
                 };
