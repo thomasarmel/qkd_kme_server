@@ -79,13 +79,14 @@ If you encounter any issue on a platform, please check the [TROUBLESHOOTING.md](
 ### Supported DBMS
 
 - :white_check_mark: : Tested.
-- :interrobang: : Could work, but not tested.
+- :x: : Not supported.
 
 | DBMS               | Status               | URI example                                         |
 |--------------------|----------------------|-----------------------------------------------------|
 | In-memory database | :white_check_mark:   | `:memory:`                                          |
 | SQLite             | :white_check_mark:   | `sqlite://path/to/kme_database.db`                  |
 | PostgreSQL         | :white_check_mark:   | `postgres://qkd_user:qkd_password@localhost/qkd_db` |
+| All other DBMS     | :x:                  |                                                     |
 
 **Note**: the database or the SQLite file should already exist, but this software can create the tables if there are missing.
 
