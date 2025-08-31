@@ -81,9 +81,10 @@ If you encounter any issue on a platform, please check the [TROUBLESHOOTING.md](
 - :white_check_mark: : Tested.
 - :interrobang: : Could work, but not tested.
 
-| DBMS          | Status             |
-|---------------|--------------------|
-| SQLite        | :white_check_mark: |
+| DBMS               | Status             | URI example                        |
+|--------------------|--------------------|------------------------------------|
+| In-memory database | :white_check_mark: | `:memory:`                         |
+| SQLite             | :white_check_mark: | `sqlite://path/to/kme_database.db` |
 
 **Note**: the database or the SQLite file should already exist, but this software can create the tables if there are missing.
 
