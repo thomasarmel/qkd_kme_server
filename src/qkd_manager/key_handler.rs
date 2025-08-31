@@ -122,10 +122,10 @@ impl KeyHandler {
         if db_uri == MEMORY_SQLITE_DB_PATH {
             return Ok(DbmsType::Sqlite);
         };
-        let parsed_uri = uri_parser::parse_uri(db_uri).map_err(|_| {
+        let parsed_uri = uriparse::URI::try_from(db_uri).map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid database URI: {}", db_uri))
         })?;
-        match parsed_uri.scheme {
+        match parsed_uri.scheme().as_str() {
             "sqlite" => Ok(DbmsType::Sqlite),
             "postgres" | "postgresql" => Ok(DbmsType::Postgres),
             _ => Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid database URI: {}", db_uri)))
