@@ -122,7 +122,7 @@ Install Docker following instructions at https://docs.docker.com/engine/install/
 
 Install Docker Compose following instructions at https://docs.docker.com/compose/install/
 
-Start the database services with Docker Compose:
+Start the database services with Docker Compose (you may need admin privileges):
 ```bash
 docker compose -f test_database_services_docker_compose.yml up -d
 ```

@@ -7,3 +7,12 @@ services:
       POSTGRES_DB: qkd_db
       POSTGRES_USER: qkd_user
       POSTGRES_PASSWORD: qkd_password
+  mysql:
+    image: mysql:latest
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: qkd_db
+      MYSQL_USER: qkd_user
+      MYSQL_PASSWORD: qkd_password
+      MYSQL_ROOT_PASSWORD: root_password

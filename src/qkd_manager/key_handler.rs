@@ -314,7 +314,7 @@ impl KeyHandler {
     }
 
     async fn add_preinit_qkd_key(&self, pre_init_key: PreInitQkdKeyWrapper) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const PREPARED_STATEMENT: &'static str = "INSERT INTO uninit_keys (key_uuid, key, other_kme_id) VALUES ($1, $2, $3);";
+        const PREPARED_STATEMENT: &'static str = "INSERT INTO uninit_keys (key_uuid, qkd_key, other_kme_id) VALUES ($1, $2, $3);";
 
         let stmt = ensure_prepared_statement_ok!(self.db, PREPARED_STATEMENT)?;
         let uuid_bytes = Bytes::try_from(pre_init_key.key_uuid).map_err(|_| {
@@ -331,7 +331,7 @@ impl KeyHandler {
     }
 
     async fn add_multiple_preinit_qkd_keys(&self, pre_init_keys: Vec<PreInitQkdKeyWrapper>) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const PREPARED_STATEMENT: &'static str = "INSERT INTO uninit_keys (key_uuid, key, other_kme_id) "; // QueryBuilder will add the VALUES part
+        const PREPARED_STATEMENT: &'static str = "INSERT INTO uninit_keys (key_uuid, qkd_key, other_kme_id) "; // QueryBuilder will add the VALUES part
 
         let mut qb = QueryBuilder::new(PREPARED_STATEMENT);
 
@@ -419,7 +419,7 @@ impl KeyHandler {
     }
 
     async fn get_sae_keys(&self, origin_sae_certificate: &SaeClientCertSerial, target_sae_id: SaeId, key_count: RequestedKeyCount) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const FETCH_PREINIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, key_uuid, key, other_kme_id FROM uninit_keys WHERE other_kme_id = $1 LIMIT $2;";
+        const FETCH_PREINIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, key_uuid, qkd_key, other_kme_id FROM uninit_keys WHERE other_kme_id = $1 LIMIT $2;";
 
         let key_count = key_count.get();
         if key_count == 0 {
@@ -446,16 +446,16 @@ impl KeyHandler {
             error!("Error executing SQL statement: {:?}", e);
             QkdManagerResponse::Ko
         })? {
-            let id: i64 = row.try_get("id").map_err(|_| {
-                error!("Error reading SQL statement result");
+            let id: i64 = row.try_get("id").map_err(|e| {
+                error!("Error reading SQL statement result: {}", e);
                 QkdManagerResponse::Ko
             })?;
-            let key_uuid: String = row.try_get("key_uuid").map_err(|_| {
-                error!("Error reading SQL statement result");
+            let key_uuid: String = row.try_get("key_uuid").map_err(|e| {
+                error!("Error reading SQL statement result: {}", e);
                 QkdManagerResponse::Ko
             })?;
-            let key: Vec<u8> = row.try_get("key").map_err(|_| {
-                error!("Error reading SQL statement result");
+            let key: Vec<u8> = row.try_get("qkd_key").map_err(|e| {
+                error!("Error reading SQL statement result: {}", e);
                 QkdManagerResponse::Ko
             })?;
             fetched_preinit_keys.push((id, key_uuid, key));
@@ -513,7 +513,7 @@ impl KeyHandler {
     }
 
     async fn activate_key_uuids_sae(&self, origin_sae_id: SaeId, target_sae_id: SaeId, key_uuids_list: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const GET_PRE_INIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, key, other_kme_id FROM uninit_keys WHERE key_uuid = $1 LIMIT 1;";
+        const GET_PRE_INIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, qkd_key, other_kme_id FROM uninit_keys WHERE key_uuid = $1 LIMIT 1;";
 
         let retrieved_preinit_key_tuples_futures = key_uuids_list.iter().map(async |key_uuid| {
             let stmt = ensure_prepared_statement_ok!(self.db, GET_PRE_INIT_KEY_PREPARED_STATEMENT)?;
@@ -531,12 +531,12 @@ impl KeyHandler {
                 }
             };
 
-            let key_id: i64 = sql_execution_row.try_get("id").map_err(|_| {
-                error!("Error reading SQL statement result");
+            let key_id: i64 = sql_execution_row.try_get("id").map_err(|e| {
+                error!("Error reading SQL statement result: {}", e);
                 QkdManagerResponse::Ko
             })?;
-            let key: Vec<u8> = sql_execution_row.try_get("key").map_err(|_| {
-                error!("Error reading SQL statement result");
+            let key: Vec<u8> = sql_execution_row.try_get("qkd_key").map_err(|e| {
+                error!("Error reading SQL statement result: {}", e);
                 QkdManagerResponse::Ko
             })?;
             Ok((key_uuid.clone(), key_id, key))
@@ -618,7 +618,7 @@ impl KeyHandler {
     }
 
     async fn insert_activated_key(&self, key_uuid: &str, key: &[u8], origin_sae_id: SaeId, target_sae_id: SaeId)-> Result<QkdManagerResponse, QkdManagerResponse> {
-        const INSERT_INIT_KEY_PREPARED_STATEMENT: &'static str = "INSERT INTO keys (key_uuid, key, origin_sae_id, target_sae_id) VALUES ($1, $2, $3, $4);";
+        const INSERT_INIT_KEY_PREPARED_STATEMENT: &'static str = "INSERT INTO keys (key_uuid, qkd_key, origin_sae_id, target_sae_id) VALUES ($1, $2, $3, $4);";
 
         let stmt = ensure_prepared_statement_ok!(self.db, INSERT_INIT_KEY_PREPARED_STATEMENT)?;
         let query_args = prepare_sql_arguments!(key_uuid, key, origin_sae_id, target_sae_id)?;
@@ -653,7 +653,7 @@ impl KeyHandler {
     }
 
     async fn get_sae_keys_with_ids(&self, current_sae_certificate: &SaeClientCertSerial, origin_sae_id: SaeId, keys_uuids: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const PREPARED_STATEMENT: &'static str = "SELECT key_uuid, key FROM keys WHERE target_sae_id = $1 AND origin_sae_id = $2 AND key_uuid = $3 LIMIT 1;";
+        const PREPARED_STATEMENT: &'static str = "SELECT key_uuid, qkd_key FROM keys WHERE target_sae_id = $1 AND origin_sae_id = $2 AND key_uuid = $3 LIMIT 1;";
 
         // Ensure the caller (slave) SAE ID is valid and authenticated, and get its SAE id
         let current_sae_id = self.get_sae_id_from_certificate(current_sae_certificate).await.ok_or(QkdManagerResponse::AuthenticationError)?;
@@ -676,12 +676,12 @@ impl KeyHandler {
                 }
             };
 
-            let key_uuid: String = sql_execution_row.try_get("key_uuid").map_err(|_| {
-                error!("Error reading SQL statement result");
+            let key_uuid: String = sql_execution_row.try_get("key_uuid").map_err(|e| {
+                error!("Error reading SQL statement result: {}", e);
                 QkdManagerResponse::Ko
             })?;
-            let key: Vec<u8> = sql_execution_row.try_get("key").map_err(|_| {
-                error!("Error reading SQL statement result");
+            let key: Vec<u8> = sql_execution_row.try_get("qkd_key").map_err(|e| {
+                error!("Error reading SQL statement result: {}", e);
                 QkdManagerResponse::Ko
             })?;
 
@@ -722,8 +722,8 @@ impl KeyHandler {
                 return None;
             }
         };
-        let sae_id: SaeId = sql_execution_row.try_get("sae_id").map_err(|_| {
-            error!("Error reading SQL statement result");
+        let sae_id: SaeId = sql_execution_row.try_get("sae_id").map_err(|e| {
+            error!("Error reading SQL statement result: {}", e);
             ()
         }).ok()?;
         Some(sae_id)
@@ -749,8 +749,8 @@ impl KeyHandler {
                 return None;
             }
         };
-        let kme_id: KmeId = sql_execution_row.try_get("kme_id").map_err(|_| {
-            error!("Error reading SQL statement result");
+        let kme_id: KmeId = sql_execution_row.try_get("kme_id").map_err(|e| {
+            error!("Error reading SQL statement result: {}", e);
             ()
         }).ok()?;
         Some(kme_id)
@@ -777,12 +777,12 @@ impl KeyHandler {
             }
         };
 
-        let sae_id: i64 = sql_execution_row.try_get("sae_id").map_err(|_| {
-            error!("Error reading SQL statement result");
+        let sae_id: i64 = sql_execution_row.try_get("sae_id").map_err(|e| {
+            error!("Error reading SQL statement result: {}", e);
             QkdManagerResponse::Ko
         })?;
-        let kme_id: i64 = sql_execution_row.try_get("kme_id").map_err(|_| {
-            error!("Error reading SQL statement result");
+        let kme_id: i64 = sql_execution_row.try_get("kme_id").map_err(|e| {
+            error!("Error reading SQL statement result: {}", e);
             QkdManagerResponse::Ko
         })?;
 

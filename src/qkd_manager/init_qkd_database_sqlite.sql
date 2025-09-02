@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS uninit_keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     key_uuid TEXT NOT NULL,
-    key BLOB NOT NULL,
+    qkd_key BLOB NOT NULL,
     other_kme_id INTEGER NOT NULL
 );
 
@@ -20,7 +20,7 @@ CREATE INDEX IF NOT EXISTS idx_saes_saeid_saecertificateserial ON saes(sae_id, s
 CREATE TABLE IF NOT EXISTS keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     key_uuid TEXT NOT NULL,
-    key BLOB NOT NULL,
+    qkd_key BLOB NOT NULL,
     origin_sae_id INTEGER NOT NULL,
     target_sae_id INTEGER NOT NULL,
     FOREIGN KEY (origin_sae_id) REFERENCES saes(sae_id),
