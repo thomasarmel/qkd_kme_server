@@ -1298,7 +1298,7 @@ mod tests {
                 key_handler.run().await;
             });
         });
-        tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(3)).await;
 
         command_tx.send(super::QkdManagerCommand::AddSae(sae_id, kme_id, Some(sae_certificate_serial.clone()))).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();

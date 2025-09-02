@@ -10,7 +10,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-ubuntu:
+  persistent-database-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -19,12 +19,18 @@ jobs:
           docker compose -f test_database_services_docker_compose.yml up -d
       - name: Build
         run: cargo build --verbose
-      - name: Run tests
-        run: cargo test --verbose
       - name: Run persistent database tests
         run: cargo test -- --ignored
       - name: Tear down test database Docker containers
         run: docker compose -f test_database_services_docker_compose.yml down
+  build-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
   build-windows:
     runs-on: windows-latest
     steps:

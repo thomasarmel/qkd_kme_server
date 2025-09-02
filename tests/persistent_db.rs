@@ -8,6 +8,7 @@ mod common;
 
 #[tokio::test]
 #[serial]
+#[ignore]
 async fn test_sqlite_file() {
     const CONFIG_FILE_PATH_KME1: &'static str = "tests/data/test_kme_config_sqlite.json5";
 
