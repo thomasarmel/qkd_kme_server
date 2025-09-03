@@ -16,3 +16,12 @@ services:
       MYSQL_USER: qkd_user
       MYSQL_PASSWORD: qkd_password
       MYSQL_ROOT_PASSWORD: root_password
+  mariadb:
+    image: mariadb:latest
+    ports:
+      - "3307:3306"
+    environment:
+      MARIADB_DATABASE: qkd_db
+      MARIADB_USER: qkd_user
+      MARIADB_PASSWORD: qkd_password
+      MARIADB_ROOT_PASSWORD: root_password
