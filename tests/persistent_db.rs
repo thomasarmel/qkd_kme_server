@@ -30,6 +30,18 @@ async fn test_postgres() {
     generic_persistency_test().await
 }
 
+#[tokio::test]
+#[serial]
+#[ignore]
+async fn test_mysql() {
+    const CONFIG_FILE_PATH_KME1: &'static str = "tests/data/test_kme_config_mysql.json5";
+
+    tokio::spawn(async move {
+        launch_kme_from_config_file(CONFIG_FILE_PATH_KME1).await;
+    });
+    generic_persistency_test().await
+}
+
 async fn generic_persistency_test() {
     const INIT_POST_KEY_REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/2/enc_keys");
     const DEC_KEYS_REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/dec_keys");

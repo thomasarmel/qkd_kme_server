@@ -27,7 +27,7 @@ This object describes the KME itself
 
 - **`db_uri`** *(string)*  
   URI of the database to store the QKD keys and SAE registrations 
-  (like "`sqlite://path/to/file.db`").
+  (like "`:memory:`", "`sqlite://path/to/file.db`", "`postgres://qkd_user:qkd_password@localhost/qkd_db`"...).
   
   The software will create the tables if they do not exist.
 
