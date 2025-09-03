@@ -86,7 +86,7 @@ If you encounter any issue on a platform, please check the [TROUBLESHOOTING.md](
 | In-memory database | :white_check_mark:   | `:memory:`                                          |
 | SQLite             | :white_check_mark:   | `sqlite://path/to/kme_database.db`                  |
 | PostgreSQL         | :white_check_mark:   | `postgres://qkd_user:qkd_password@localhost/qkd_db` |
-| MySQL              | :white_check_mark:   | `mysql://qkd_user:qkd_password@localhost/qkd_db`    |
+| MySQL/MariaDB      | :white_check_mark:   | `mysql://qkd_user:qkd_password@localhost/qkd_db`    |
 | All other DBMS     | :x:                  |                                                     |
 
 **Note**: the database or the SQLite file should already exist, but this software can create the tables if there are missing.
