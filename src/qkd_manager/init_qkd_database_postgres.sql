@@ -1,6 +1,6 @@
 /* Uninitialized keys, available for SAEs in this KME and other_kme */
 CREATE TABLE IF NOT EXISTS uninit_keys (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     key_uuid TEXT NOT NULL,
     qkd_key BYTEA NOT NULL,
     other_kme_id BIGINT NOT NULL
@@ -18,7 +18,7 @@ CREATE INDEX IF NOT EXISTS idx_saes_saeid_saecertificateserial ON saes(sae_id, s
 
 /* Keys assigned to SAEs */
 CREATE TABLE IF NOT EXISTS activated_keys (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     key_uuid TEXT NOT NULL,
     qkd_key BYTEA NOT NULL,
     origin_sae_id BIGINT NOT NULL,

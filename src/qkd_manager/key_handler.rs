@@ -517,15 +517,15 @@ impl KeyHandler {
         }
 
         for (key_id, key_uuid, key) in &fetched_preinit_keys {
-            self.delete_pre_init_key_with_id(*key_id).await.map_err(|_| {
-                error!("Error deleting pre-init key {}", key_id);
+            self.delete_pre_init_key_with_id(*key_id).await.map_err(|e| {
+                error!("Error deleting pre-init key {}: {:?}", key_id, e);
                 QkdManagerResponse::Ko
             })?;
 
             info!("Saving key {} in init keys", key_uuid);
 
-            self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id).map_err(|_| {
-                error!("Error inserting activated key");
+            self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id).map_err(|e| {
+                error!("Error inserting activated key: {:?}", e);
                 QkdManagerResponse::Ko
             }).await?;
         }
@@ -583,12 +583,12 @@ impl KeyHandler {
         let retrieved_preinit_key_tuples: Vec<(String, i64, Vec<u8>)> = join_all(retrieved_preinit_key_tuples_futures).await.into_iter().collect::<Result<Vec<_>, _>>()?;
 
         for (key_uuid, key_id, key) in retrieved_preinit_key_tuples {
-            self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id).map_err(|_| {
-                error!("Error inserting activated key");
+            self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id).map_err(|e| {
+                error!("Error inserting activated key: {:?}", e);
                 QkdManagerResponse::Ko
             }).await?;
-            self.delete_pre_init_key_with_id(key_id).await.map_err(|_| {
-                error!("Error deleting pre-init key {}", key_id);
+            self.delete_pre_init_key_with_id(key_id).await.map_err(|e| {
+                error!("Error deleting pre-init key {}: {:?}", key_id, e);
                 QkdManagerResponse::Ko
             })?;
 
@@ -690,14 +690,14 @@ impl KeyHandler {
             DbmsType::Postgres | DbmsType::Sqlite => PREPARED_STATEMENT,
         };
 
-        let stmt = ensure_prepared_statement_ok!(self.db, prepared_statement).map_err(|_| {
-            io_err("Error preparing SQL statement")
+        let stmt = ensure_prepared_statement_ok!(self.db, prepared_statement).map_err(|e| {
+            io_err(format!("Error preparing SQL statement: {:?}", e).as_str())
         })?;
-        let query_args = prepare_sql_arguments!(key_id).map_err(|_| {
-            io_err("Error binding key ID")
+        let query_args = prepare_sql_arguments!(key_id).map_err(|e| {
+            io_err(format!("Error binding key ID: {:?}", e).as_str())
         })?;
-        stmt.query_with(query_args).execute(&self.db).await.map_err(|_| {
-            io_err("Error executing SQL statement, maybe key ID not found in pre init keys database?")
+        stmt.query_with(query_args).execute(&self.db).await.map_err(|e| {
+            io_err(format!("Error executing SQL statement, maybe key ID not found in pre init keys database?: {:?}", e).as_str())
         })?;
         Ok(())
     }
