@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS saes (
 CREATE INDEX IF NOT EXISTS idx_saes_saeid_saecertificateserial ON saes(sae_id, sae_certificate_serial);
 
 /* Keys assigned to SAEs */
-CREATE TABLE IF NOT EXISTS keys (
+CREATE TABLE IF NOT EXISTS activated_keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     key_uuid TEXT NOT NULL,
     qkd_key BLOB NOT NULL,
@@ -27,4 +27,4 @@ CREATE TABLE IF NOT EXISTS keys (
     FOREIGN KEY (target_sae_id) REFERENCES saes(sae_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_keys_id_keyuuid ON keys(id, key_uuid);
+CREATE INDEX IF NOT EXISTS idx_keys_id_keyuuid ON activated_keys(id, key_uuid);

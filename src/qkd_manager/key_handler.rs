@@ -25,6 +25,7 @@ use x509_parser::nom::AsBytes;
 enum DbmsType {
     Sqlite,
     Postgres,
+    MySQL,
 }
 
 impl std::fmt::Display for DbmsType {
@@ -32,6 +33,7 @@ impl std::fmt::Display for DbmsType {
         match self {
             DbmsType::Sqlite => write!(f, "SQLite"),
             DbmsType::Postgres => write!(f, "PostgreSQL"),
+            DbmsType::MySQL => write!(f, "MySQL"),
         }
     }
 }
@@ -72,6 +74,7 @@ impl KeyHandler {
     pub(super) async fn new(db_uri: &str, command_rx: crossbeam_channel::Receiver<QkdManagerCommand>, response_tx: crossbeam_channel::Sender<QkdManagerResponse>, this_kme_id: KmeId, kme_nickname: Option<String>) -> Result<Self, io::Error> {
         const SQLITE_DATABASE_INIT_REQ: &'static str = include_str!("init_qkd_database_sqlite.sql");
         const POSTGRES_DATABASE_INIT_REQ: &'static str = include_str!("init_qkd_database_postgres.sql");
+        const MYSQL_DATABASE_INIT_REQ: &'static str = include_str!("init_qkd_database_mysql.sql");
         const IN_MEMORY_SQLITE_URI: &'static str = "sqlite::memory:";
 
         let dbms_type = Self::get_dbms_type_from_uri(db_uri)?;
@@ -81,6 +84,7 @@ impl KeyHandler {
         let database_initialization_req = match dbms_type {
             DbmsType::Sqlite => SQLITE_DATABASE_INIT_REQ,
             DbmsType::Postgres => POSTGRES_DATABASE_INIT_REQ,
+            DbmsType::MySQL => MYSQL_DATABASE_INIT_REQ,
         };
 
         sqlx::any::install_default_drivers();
@@ -128,6 +132,7 @@ impl KeyHandler {
         match parsed_uri.scheme().as_str() {
             "sqlite" => Ok(DbmsType::Sqlite),
             "postgres" | "postgresql" => Ok(DbmsType::Postgres),
+            "mysql" => Ok(DbmsType::MySQL),
             _ => Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid database URI: {}", db_uri)))
         }
     }
@@ -248,9 +253,13 @@ impl KeyHandler {
     /// * `sae_certificate_serial` - The SAE certificate serial number, None if the SAE isn't supposed to authenticate to this KME
     async fn add_sae(&self, sae_id: SaeId, kme_id: KmeId, sae_certificate_serial: &Option<SaeClientCertSerial>) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const PREPARED_INSERT_STATEMENT_KNOWN_CERT: &'static str = "INSERT INTO saes (sae_id, kme_id, sae_certificate_serial) VALUES ($1, $2, $3);";
+        const PREPARED_INSERT_STATEMENT_KNOWN_CERT_MYSQL: &'static str = "INSERT INTO saes (sae_id, kme_id, sae_certificate_serial) VALUES (?, ?, ?);";
         const PREPARED_INSERT_STATEMENT_NO_CERT: &'static str = "INSERT INTO saes (sae_id, kme_id) VALUES ($1, $2);";
+        const PREPARED_INSERT_STATEMENT_NO_CERT_MYSQL: &'static str = "INSERT INTO saes (sae_id, kme_id) VALUES (?, ?);";
         const PREPARED_UPDATE_STATEMENT_KNOWN_CERT: &'static str = "UPDATE saes SET kme_id = $1, sae_certificate_serial = $2 WHERE sae_id = $3;";
+        const PREPARED_UPDATE_STATEMENT_KNOWN_CERT_MYSQL: &'static str = "UPDATE saes SET kme_id = ?, sae_certificate_serial = ? WHERE sae_id = ?;";
         const PREPARED_UPDATE_STATEMENT_NO_CERT: &'static str = "UPDATE saes SET kme_id = $1, sae_certificate_serial = NULL WHERE sae_id = $2;";
+        const PREPARED_UPDATE_STATEMENT_NO_CERT_MYSQL: &'static str = "UPDATE saes SET kme_id = ?, sae_certificate_serial = NULL WHERE sae_id = ?;";
 
         let has_provided_certificate = sae_certificate_serial.is_some();
         let is_this_kme = kme_id == self.this_kme_id;
@@ -259,14 +268,19 @@ impl KeyHandler {
             return Err(QkdManagerResponse::InconsistentSaeData);
         }
 
-        let insert_statement = match sae_certificate_serial {
-            Some(_) => PREPARED_INSERT_STATEMENT_KNOWN_CERT,
-            None => PREPARED_INSERT_STATEMENT_NO_CERT,
-        };
-
-        let update_statement = match sae_certificate_serial {
-            Some(_) => PREPARED_UPDATE_STATEMENT_KNOWN_CERT,
-            None => PREPARED_UPDATE_STATEMENT_NO_CERT,
+        let (insert_statement, update_statement) = match self.dbms_type {
+            DbmsType::MySQL => {
+                match sae_certificate_serial {
+                    Some(_) => (PREPARED_INSERT_STATEMENT_KNOWN_CERT_MYSQL, PREPARED_UPDATE_STATEMENT_KNOWN_CERT_MYSQL),
+                    None => (PREPARED_INSERT_STATEMENT_NO_CERT_MYSQL, PREPARED_UPDATE_STATEMENT_NO_CERT_MYSQL),
+                }
+            },
+            DbmsType::Postgres | DbmsType::Sqlite => {
+                match sae_certificate_serial {
+                    Some(_) => (PREPARED_INSERT_STATEMENT_KNOWN_CERT, PREPARED_UPDATE_STATEMENT_KNOWN_CERT),
+                    None => (PREPARED_INSERT_STATEMENT_NO_CERT, PREPARED_UPDATE_STATEMENT_NO_CERT),
+                }
+            }
         };
 
         let mut query_args_update = prepare_sql_arguments!(kme_id)?;
@@ -315,8 +329,14 @@ impl KeyHandler {
 
     async fn add_preinit_qkd_key(&self, pre_init_key: PreInitQkdKeyWrapper) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const PREPARED_STATEMENT: &'static str = "INSERT INTO uninit_keys (key_uuid, qkd_key, other_kme_id) VALUES ($1, $2, $3);";
+        const PREPARED_STATEMENT_MYSQL: &'static str = "INSERT INTO uninit_keys (key_uuid, qkd_key, other_kme_id) VALUES (?, ?, ?);";
 
-        let stmt = ensure_prepared_statement_ok!(self.db, PREPARED_STATEMENT)?;
+        let prepared_statement = match self.dbms_type {
+            DbmsType::MySQL => PREPARED_STATEMENT_MYSQL,
+            DbmsType::Postgres | DbmsType::Sqlite => PREPARED_STATEMENT,
+        };
+
+        let stmt = ensure_prepared_statement_ok!(self.db, prepared_statement)?;
         let uuid_bytes = Bytes::try_from(pre_init_key.key_uuid).map_err(|_| {
             error!("Error converting UUID to bytes");
             QkdManagerResponse::Ko
@@ -384,13 +404,19 @@ impl KeyHandler {
 
     async fn get_sae_status(&self, origin_sae_certificate: &SaeClientCertSerial, target_sae_id: SaeId) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const PREPARED_STATEMENT: &'static str = "SELECT COUNT(*) FROM uninit_keys WHERE other_kme_id = $1;";
+        const PREPARED_STATEMENT_MYSQL: &'static str = "SELECT COUNT(*) FROM uninit_keys WHERE other_kme_id = ?;";
+
+        let prepared_statement = match self.dbms_type {
+            DbmsType::MySQL => PREPARED_STATEMENT_MYSQL,
+            DbmsType::Postgres | DbmsType::Sqlite => PREPARED_STATEMENT,
+        };
 
         let target_kme_id = self.get_kme_id_from_sae_id(target_sae_id).await.ok_or(QkdManagerResponse::NotFound)?;
 
         // Ensure the origin (master) SAE ID is valid, and get its SAE id
         let origin_sae_id = self.get_sae_id_from_certificate(origin_sae_certificate).await.ok_or(QkdManagerResponse::AuthenticationError)?;
 
-        let stmt = ensure_prepared_statement_ok!(self.db, PREPARED_STATEMENT)?;
+        let stmt = ensure_prepared_statement_ok!(self.db, prepared_statement)?;
         let query_args = prepare_sql_arguments!(target_kme_id)?;
         let key_count: i64 = stmt.query_scalar_with(query_args).fetch_one(&self.db).await.map_err(|e| {
             error!("Error executing SQL statement: {:?}", e);
@@ -420,6 +446,12 @@ impl KeyHandler {
 
     async fn get_sae_keys(&self, origin_sae_certificate: &SaeClientCertSerial, target_sae_id: SaeId, key_count: RequestedKeyCount) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const FETCH_PREINIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, key_uuid, qkd_key, other_kme_id FROM uninit_keys WHERE other_kme_id = $1 LIMIT $2;";
+        const FETCH_PREINIT_KEY_PREPARED_STATEMENT_MYSQL: &'static str = "SELECT id, key_uuid, qkd_key, other_kme_id FROM uninit_keys WHERE other_kme_id = ? LIMIT ?;";
+
+        let fetch_preinit_key_prepared_statement = match self.dbms_type {
+            DbmsType::MySQL => FETCH_PREINIT_KEY_PREPARED_STATEMENT_MYSQL,
+            DbmsType::Postgres | DbmsType::Sqlite => FETCH_PREINIT_KEY_PREPARED_STATEMENT,
+        };
 
         let key_count = key_count.get();
         if key_count == 0 {
@@ -435,7 +467,7 @@ impl KeyHandler {
 
         export_important_logging_message!(&self, &format!("SAE {} requested a key to communicate with {}", origin_sae_id, target_sae_id));
 
-        let stmt = ensure_prepared_statement_ok!(self.db, FETCH_PREINIT_KEY_PREPARED_STATEMENT)?;
+        let stmt = ensure_prepared_statement_ok!(self.db, fetch_preinit_key_prepared_statement)?;
         let query_args = prepare_sql_arguments!(target_kme_id, key_count as i64)?;
 
         let mut fetched_preinit_keys: Vec<(i64, String, Vec<u8>)> = Vec::with_capacity(key_count);
@@ -514,9 +546,15 @@ impl KeyHandler {
 
     async fn activate_key_uuids_sae(&self, origin_sae_id: SaeId, target_sae_id: SaeId, key_uuids_list: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const GET_PRE_INIT_KEY_PREPARED_STATEMENT: &'static str = "SELECT id, qkd_key, other_kme_id FROM uninit_keys WHERE key_uuid = $1 LIMIT 1;";
+        const GET_PRE_INIT_KEY_PREPARED_STATEMENT_MYSQL: &'static str = "SELECT id, qkd_key, other_kme_id FROM uninit_keys WHERE key_uuid = ? LIMIT 1;";
+
+        let get_pre_init_key_prepared_statement = match self.dbms_type {
+            DbmsType::MySQL => GET_PRE_INIT_KEY_PREPARED_STATEMENT_MYSQL,
+            DbmsType::Postgres | DbmsType::Sqlite => GET_PRE_INIT_KEY_PREPARED_STATEMENT,
+        };
 
         let retrieved_preinit_key_tuples_futures = key_uuids_list.iter().map(async |key_uuid| {
-            let stmt = ensure_prepared_statement_ok!(self.db, GET_PRE_INIT_KEY_PREPARED_STATEMENT)?;
+            let stmt = ensure_prepared_statement_ok!(self.db, get_pre_init_key_prepared_statement)?;
             let query_args = prepare_sql_arguments!(key_uuid.as_str())?;
 
             let sql_execution_row = stmt.query_with(query_args).fetch_optional(&self.db).await.map_err(|e| {
@@ -618,9 +656,15 @@ impl KeyHandler {
     }
 
     async fn insert_activated_key(&self, key_uuid: &str, key: &[u8], origin_sae_id: SaeId, target_sae_id: SaeId)-> Result<QkdManagerResponse, QkdManagerResponse> {
-        const INSERT_INIT_KEY_PREPARED_STATEMENT: &'static str = "INSERT INTO keys (key_uuid, qkd_key, origin_sae_id, target_sae_id) VALUES ($1, $2, $3, $4);";
+        const INSERT_INIT_KEY_PREPARED_STATEMENT: &'static str = "INSERT INTO activated_keys (key_uuid, qkd_key, origin_sae_id, target_sae_id) VALUES ($1, $2, $3, $4);";
+        const INSERT_INIT_KEY_PREPARED_STATEMENT_MYSQL: &'static str = "INSERT INTO activated_keys (key_uuid, qkd_key, origin_sae_id, target_sae_id) VALUES (?, ?, ?, ?);";
 
-        let stmt = ensure_prepared_statement_ok!(self.db, INSERT_INIT_KEY_PREPARED_STATEMENT)?;
+        let insert_init_key_prepared_statement = match self.dbms_type {
+            DbmsType::MySQL => INSERT_INIT_KEY_PREPARED_STATEMENT_MYSQL,
+            DbmsType::Postgres | DbmsType::Sqlite => INSERT_INIT_KEY_PREPARED_STATEMENT,
+        };
+
+        let stmt = ensure_prepared_statement_ok!(self.db, insert_init_key_prepared_statement)?;
         let query_args = prepare_sql_arguments!(key_uuid, key, origin_sae_id, target_sae_id)?;
         stmt.query_with(query_args).execute(&self.db).await.map_err(|e| {
             error!("Error executing SQL statement: {:?}", e);
@@ -639,8 +683,14 @@ impl KeyHandler {
     /// Ok if the key was deleted, an error otherwise
     async fn delete_pre_init_key_with_id(&self, key_id: i64) -> Result<(), io::Error> {
         const PREPARED_STATEMENT: &'static str = "DELETE FROM uninit_keys WHERE id = $1;";
+        const PREPARED_STATEMENT_MYSQL: &'static str = "DELETE FROM uninit_keys WHERE id = ?;";
 
-        let stmt = ensure_prepared_statement_ok!(self.db, PREPARED_STATEMENT).map_err(|_| {
+        let prepared_statement = match self.dbms_type {
+            DbmsType::MySQL => PREPARED_STATEMENT_MYSQL,
+            DbmsType::Postgres | DbmsType::Sqlite => PREPARED_STATEMENT,
+        };
+
+        let stmt = ensure_prepared_statement_ok!(self.db, prepared_statement).map_err(|_| {
             io_err("Error preparing SQL statement")
         })?;
         let query_args = prepare_sql_arguments!(key_id).map_err(|_| {
@@ -653,14 +703,20 @@ impl KeyHandler {
     }
 
     async fn get_sae_keys_with_ids(&self, current_sae_certificate: &SaeClientCertSerial, origin_sae_id: SaeId, keys_uuids: Vec<String>) -> Result<QkdManagerResponse, QkdManagerResponse> {
-        const PREPARED_STATEMENT: &'static str = "SELECT key_uuid, qkd_key FROM keys WHERE target_sae_id = $1 AND origin_sae_id = $2 AND key_uuid = $3 LIMIT 1;";
+        const PREPARED_STATEMENT: &'static str = "SELECT key_uuid, qkd_key FROM activated_keys WHERE target_sae_id = $1 AND origin_sae_id = $2 AND key_uuid = $3 LIMIT 1;";
+        const PREPARED_STATEMENT_MYSQL: &'static str = "SELECT key_uuid, qkd_key FROM activated_keys WHERE target_sae_id = ? AND origin_sae_id = ? AND key_uuid = ? LIMIT 1;";
+
+        let prepared_statement = match self.dbms_type {
+            DbmsType::MySQL => PREPARED_STATEMENT_MYSQL,
+            DbmsType::Postgres | DbmsType::Sqlite => PREPARED_STATEMENT,
+        };
 
         // Ensure the caller (slave) SAE ID is valid and authenticated, and get its SAE id
         let current_sae_id = self.get_sae_id_from_certificate(current_sae_certificate).await.ok_or(QkdManagerResponse::AuthenticationError)?;
 
         // For each key UUID, retrieve the key from the database if it exists and is applicable to the caller SAE ID
         let keys_futures = keys_uuids.iter().map(async |key_uuid| {
-            let stmt = ensure_prepared_statement_ok!(self.db, PREPARED_STATEMENT)?;
+            let stmt = ensure_prepared_statement_ok!(self.db, prepared_statement)?;
             let query_args = prepare_sql_arguments!(current_sae_id, origin_sae_id, key_uuid.as_str())?;
 
             let sql_execution_row = stmt.query_with(query_args).fetch_optional(&self.db).await.map_err(|e| {
@@ -709,7 +765,14 @@ impl KeyHandler {
     /// The SAE ID if the certificate serial number is found in the database, None otherwise
     async fn get_sae_id_from_certificate(&self, sae_certificate: &SaeClientCertSerial) -> Option<SaeId> {
         const PREPARED_STATEMENT: &'static str = "SELECT sae_id FROM saes WHERE sae_certificate_serial = $1 LIMIT 1;";
-        let stmt = ensure_prepared_statement_ok!(self.db, PREPARED_STATEMENT).ok()?;
+        const PREPARED_STATEMENT_MYSQL: &'static str = "SELECT sae_id FROM saes WHERE sae_certificate_serial = ? LIMIT 1;";
+
+        let prepared_statement = match self.dbms_type {
+            DbmsType::MySQL => PREPARED_STATEMENT_MYSQL,
+            DbmsType::Postgres | DbmsType::Sqlite => PREPARED_STATEMENT,
+        };
+
+        let stmt = ensure_prepared_statement_ok!(self.db, prepared_statement).ok()?;
         let query_args = prepare_sql_arguments!(sae_certificate.as_bytes()).ok()?;
         let sql_execution_row = stmt.query_with(query_args).fetch_optional(&self.db).await.map_err(|e| {
             error!("Error executing SQL statement: {:?}", e);
@@ -736,7 +799,14 @@ impl KeyHandler {
     /// The KME ID if the SAE ID is found in the database, None otherwise
     async fn get_kme_id_from_sae_id(&self, sae_id: SaeId) -> Option<KmeId> {
         const PREPARED_STATEMENT: &'static str = "SELECT kme_id FROM saes WHERE sae_id = $1 LIMIT 1;";
-        let stmt = ensure_prepared_statement_ok!(self.db, PREPARED_STATEMENT).ok()?;
+        const PREPARED_STATEMENT_MYSQL: &'static str = "SELECT kme_id FROM saes WHERE sae_id = ? LIMIT 1;";
+
+        let prepared_statement = match self.dbms_type {
+            DbmsType::MySQL => PREPARED_STATEMENT_MYSQL,
+            DbmsType::Postgres | DbmsType::Sqlite => PREPARED_STATEMENT,
+        };
+
+        let stmt = ensure_prepared_statement_ok!(self.db, prepared_statement).ok()?;
         let query_args = prepare_sql_arguments!(sae_id).ok()?;
         let sql_execution_row = stmt.query_with(query_args).fetch_optional(&self.db).await.map_err(|e| {
             error!("Error executing SQL statement: {:?}", e);
@@ -763,7 +833,14 @@ impl KeyHandler {
     /// The SAE info, including KME ID, if the certificate serial number is found in the database, an error otherwise
     async fn get_sae_infos_from_certificate(&self, sae_certificate: &SaeClientCertSerial) -> Result<QkdManagerResponse, QkdManagerResponse> {
         const PREPARED_STATEMENT: &'static str = "SELECT sae_id, kme_id FROM saes WHERE sae_certificate_serial = $1 LIMIT 1;";
-        let stmt = ensure_prepared_statement_ok!(self.db, PREPARED_STATEMENT)?;
+        const PREPARED_STATEMENT_MYSQL: &'static str = "SELECT sae_id, kme_id FROM saes WHERE sae_certificate_serial = ? LIMIT 1;";
+
+        let prepared_statement = match self.dbms_type {
+            DbmsType::MySQL => PREPARED_STATEMENT_MYSQL,
+            DbmsType::Postgres | DbmsType::Sqlite => PREPARED_STATEMENT,
+        };
+
+        let stmt = ensure_prepared_statement_ok!(self.db, prepared_statement)?;
         let query_args = prepare_sql_arguments!(sae_certificate.as_bytes())?;
         let sql_execution_row = stmt.query_with(query_args).fetch_optional(&self.db).await.map_err(|e| {
             error!("Error executing SQL statement: {:?}", e);
