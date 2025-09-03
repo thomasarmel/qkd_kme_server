@@ -48,9 +48,7 @@ There should exist a directory where binary key files are stored after Privacy A
 
 All the authentication is performed via SSL client and server certificates. Within the same "secure-zone", SAEs are distinguished by their client certificate serial number.
 
-For now read QKD keys are stored inside a SQLite database, either in memory or on disk.
-
-:checkered_flag: I plan to add a feature to store keys in a secure database in the future.
+Read QKD keys are stored inside a SQL database of your choice, among [supported DBMS](#supported-dbms).
 
 ---
 
