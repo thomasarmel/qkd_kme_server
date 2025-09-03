@@ -6,7 +6,7 @@ use hyper::body::{Bytes, Incoming};
 use hyper::{Request, Response, StatusCode};
 use http_body_util::BodyExt;
 use rustls_pki_types::CertificateDer;
-use crate::MAX_QKD_KEY_PER_KEY_ENC_REQUEST;
+use crate::MAX_QKD_KEYS_PER_REQUEST;
 use crate::qkd_manager::http_request_obj::ActivateKeyRemoteKME;
 use crate::qkd_manager::QkdManager;
 use crate::routes::Routes;
@@ -35,11 +35,11 @@ impl Routes for InterKMEsRoutes {
             }
         };
 
-        if key_to_activate_obj.key_IDs_list.len() > MAX_QKD_KEY_PER_KEY_ENC_REQUEST {
+        if key_to_activate_obj.key_IDs_list.len() > MAX_QKD_KEYS_PER_REQUEST {
             return Ok(
                 Response::builder()
                     .status(StatusCode::BAD_REQUEST)
-                    .body(Full::new(Bytes::from(format!("Too many keys requested, max is {}", MAX_QKD_KEY_PER_KEY_ENC_REQUEST)))).unwrap()
+                    .body(Full::new(Bytes::from(format!("Too many keys requested, max is {}", MAX_QKD_KEYS_PER_REQUEST)))).unwrap()
             );
         }
 

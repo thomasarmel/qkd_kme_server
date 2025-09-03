@@ -36,7 +36,7 @@ ID of the calling SAE is automatically retrieved from the client certificate.
   "key_size": 256,
   "stored_key_count": 1,
   "max_key_count": 10,
-  "max_key_per_request": 1,
+  "max_key_per_request": 10,
   "max_key_size": 256,
   "min_key_size": 256,
   "max_SAE_ID_count": 0

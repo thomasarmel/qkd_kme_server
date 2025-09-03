@@ -128,13 +128,13 @@ mod test {
             key_size: 128,
             stored_key_count: 1,
             max_key_count: 1,
-            max_key_per_request: 1,
+            max_key_per_request: 10,
             max_key_size: 128,
             min_key_size: 128,
             max_SAE_ID_count: 1,
         };
         let response_qkd_keys_status_json = response_qkd_keys_status.to_json().unwrap();
-        assert_eq!(response_qkd_keys_status_json.replace("\r", ""), "{\n  \"source_KME_ID\": \"source_KME_ID\",\n  \"target_KME_ID\": \"target_KME_ID\",\n  \"master_SAE_ID\": \"master_SAE_ID\",\n  \"slave_SAE_ID\": \"slave_SAE_ID\",\n  \"key_size\": 128,\n  \"stored_key_count\": 1,\n  \"max_key_count\": 1,\n  \"max_key_per_request\": 1,\n  \"max_key_size\": 128,\n  \"min_key_size\": 128,\n  \"max_SAE_ID_count\": 1\n}");
+        assert_eq!(response_qkd_keys_status_json.replace("\r", ""), "{\n  \"source_KME_ID\": \"source_KME_ID\",\n  \"target_KME_ID\": \"target_KME_ID\",\n  \"master_SAE_ID\": \"master_SAE_ID\",\n  \"slave_SAE_ID\": \"slave_SAE_ID\",\n  \"key_size\": 128,\n  \"stored_key_count\": 1,\n  \"max_key_count\": 1,\n  \"max_key_per_request\": 10,\n  \"max_key_size\": 128,\n  \"min_key_size\": 128,\n  \"max_SAE_ID_count\": 1\n}");
     }
 
     #[test]
