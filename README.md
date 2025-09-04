@@ -365,6 +365,7 @@ to shared libraries that may not be present on the target machine, like `libc.so
 The solution is to build a static binary, linked to `musl` instead of `glibc`:
 
 ```bash
+sudo apt-get update && sudo apt-get install musl-tools
 rustup target add x86_64-unknown-linux-musl
 cargo build --release --target=x86_64-unknown-linux-musl
 ```
