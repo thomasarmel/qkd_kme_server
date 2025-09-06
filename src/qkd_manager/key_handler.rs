@@ -11,12 +11,13 @@ use base64::{engine::general_purpose, Engine as _};
 use futures::future::join_all;
 use futures::{TryFutureExt, TryStreamExt};
 use log::{error, info, warn};
-use sqlx::{Arguments, Execute, Executor, QueryBuilder, Row, Statement};
+use sqlx::{Arguments, Execute, Executor, QueryBuilder, Row, Statement, Transaction};
 use std::convert::identity;
 use std::sync::Arc;
 use std::{io, vec};
 use std::cmp::PartialEq;
 use sqlx::any::{AnyArguments, AnyPoolOptions};
+use sqlx_core::any::Any;
 use uuid::Bytes;
 use x509_parser::nom::AsBytes;
 
@@ -516,19 +517,29 @@ impl KeyHandler {
             export_important_logging_message!(&self, &format!("As SAE {} belongs to KME {}, activating it through inter KMEs network", target_sae_id, target_kme_id));
         }
 
+        let mut transaction = self.db.begin().await.map_err(|e| {
+            error!("Error starting SQL transaction: {:?}", e);
+            QkdManagerResponse::Ko
+        })?;
+
         for (key_id, key_uuid, key) in &fetched_preinit_keys {
-            self.delete_pre_init_key_with_id(*key_id).await.map_err(|e| {
+            self.delete_pre_init_key_with_id(*key_id, Some(&mut transaction)).await.map_err(|e| {
                 error!("Error deleting pre-init key {}: {:?}", key_id, e);
                 QkdManagerResponse::Ko
             })?;
 
             info!("Saving key {} in init keys", key_uuid);
 
-            self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id).map_err(|e| {
+            self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id, Some(&mut transaction)).map_err(|e| {
                 error!("Error inserting activated key: {:?}", e);
                 QkdManagerResponse::Ko
             }).await?;
         }
+
+        transaction.commit().await.map_err(|e| {
+            error!("Error committing SQL transaction: {:?}", e);
+            QkdManagerResponse::Ko
+        })?;
 
         let keys_response = fetched_preinit_keys.iter().map(|(_, key_uuid, key)| {
             // Encode the key in base64
@@ -582,18 +593,28 @@ impl KeyHandler {
 
         let retrieved_preinit_key_tuples: Vec<(String, i64, Vec<u8>)> = join_all(retrieved_preinit_key_tuples_futures).await.into_iter().collect::<Result<Vec<_>, _>>()?;
 
+        let mut transaction = self.db.begin().await.map_err(|e| {
+            error!("Error starting SQL transaction: {:?}", e);
+            QkdManagerResponse::Ko
+        })?;
+
         for (key_uuid, key_id, key) in retrieved_preinit_key_tuples {
-            self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id).map_err(|e| {
+            self.insert_activated_key(&key_uuid, &key, origin_sae_id, target_sae_id, Some(&mut transaction)).map_err(|e| {
                 error!("Error inserting activated key: {:?}", e);
                 QkdManagerResponse::Ko
             }).await?;
-            self.delete_pre_init_key_with_id(key_id).await.map_err(|e| {
+            self.delete_pre_init_key_with_id(key_id, Some(&mut transaction)).await.map_err(|e| {
                 error!("Error deleting pre-init key {}: {:?}", key_id, e);
                 QkdManagerResponse::Ko
             })?;
 
             info!("Key {} activated between saes {} and {}", key_uuid, origin_sae_id, target_sae_id);
         }
+
+        transaction.commit().await.map_err(|e| {
+            error!("Error committing SQL transaction: {:?}", e);
+            QkdManagerResponse::Ko
+        })?;
 
         Ok(QkdManagerResponse::Ok)
     }
@@ -655,7 +676,7 @@ impl KeyHandler {
         Ok(())
     }
 
-    async fn insert_activated_key(&self, key_uuid: &str, key: &[u8], origin_sae_id: SaeId, target_sae_id: SaeId)-> Result<QkdManagerResponse, QkdManagerResponse> {
+    async fn insert_activated_key(&self, key_uuid: &str, key: &[u8], origin_sae_id: SaeId, target_sae_id: SaeId, transaction: Option<&mut Transaction<'_, Any>>)-> Result<QkdManagerResponse, QkdManagerResponse> {
         const INSERT_INIT_KEY_PREPARED_STATEMENT: &'static str = "INSERT INTO activated_keys (key_uuid, qkd_key, origin_sae_id, target_sae_id) VALUES ($1, $2, $3, $4);";
         const INSERT_INIT_KEY_PREPARED_STATEMENT_MYSQL: &'static str = "INSERT INTO activated_keys (key_uuid, qkd_key, origin_sae_id, target_sae_id) VALUES (?, ?, ?, ?);";
 
@@ -664,12 +685,30 @@ impl KeyHandler {
             DbmsType::Postgres | DbmsType::Sqlite => INSERT_INIT_KEY_PREPARED_STATEMENT,
         };
 
-        let stmt = ensure_prepared_statement_ok!(self.db, insert_init_key_prepared_statement)?;
+        let mut internal_transaction = None; // to keep the transaction alive if we create it
+        let transaction = match transaction {
+            Some(tx) =>  tx,
+            None => {
+                internal_transaction = Some(self.db.begin().await.map_err(|e| {
+                    error!("Error starting transaction: {:?}", e);
+                    QkdManagerResponse::Ko
+                })?);
+                internal_transaction.as_mut().unwrap()
+            },
+        };
+
+        let stmt = ensure_prepared_statement_ok!(&mut **transaction, insert_init_key_prepared_statement)?;
         let query_args = prepare_sql_arguments!(key_uuid, key, origin_sae_id, target_sae_id)?;
-        stmt.query_with(query_args).execute(&self.db).await.map_err(|e| {
+        stmt.query_with(query_args).execute(&mut **transaction).await.map_err(|e| {
             error!("Error executing SQL statement: {:?}", e);
             QkdManagerResponse::Ko
         })?;
+        if let Some(tx) = internal_transaction {
+            tx.commit().await.map_err(|e| {
+                error!("Error committing transaction: {:?}", e);
+                QkdManagerResponse::Ko
+            })?;
+        }
         export_important_logging_message!(&self, &format!("Key {} activated between SAEs {} and {}", key_uuid, origin_sae_id, target_sae_id));
         Ok(QkdManagerResponse::Ok)
     }
@@ -679,9 +718,10 @@ impl KeyHandler {
     /// So that the same key isn't requested again by a master SAE
     /// # Arguments
     /// * `key_id` - The ID of the pre init key to delete
+    /// * `transaction` - An optional transaction to use for db requests, if None a new transaction will be created
     /// # Returns
     /// Ok if the key was deleted, an error otherwise
-    async fn delete_pre_init_key_with_id(&self, key_id: i64) -> Result<(), io::Error> {
+    async fn delete_pre_init_key_with_id(&self, key_id: i64, transaction: Option<&mut Transaction<'_, Any>>) -> Result<(), io::Error> {
         const PREPARED_STATEMENT: &'static str = "DELETE FROM uninit_keys WHERE id = $1;";
         const PREPARED_STATEMENT_MYSQL: &'static str = "DELETE FROM uninit_keys WHERE id = ?;";
 
@@ -690,15 +730,31 @@ impl KeyHandler {
             DbmsType::Postgres | DbmsType::Sqlite => PREPARED_STATEMENT,
         };
 
-        let stmt = ensure_prepared_statement_ok!(self.db, prepared_statement).map_err(|e| {
+        let mut internal_transaction = None; // to keep the transaction alive if we create it
+        let transaction = match transaction {
+            Some(tx) => tx,
+            None => {
+                internal_transaction = Some(self.db.begin().await.map_err(|e| {
+                    io_err(format!("Error starting transaction: {:?}", e).as_str())
+                })?);
+                internal_transaction.as_mut().unwrap()
+            },
+        };
+
+        let stmt = ensure_prepared_statement_ok!(&mut **transaction, prepared_statement).map_err(|e| {
             io_err(format!("Error preparing SQL statement: {:?}", e).as_str())
         })?;
         let query_args = prepare_sql_arguments!(key_id).map_err(|e| {
             io_err(format!("Error binding key ID: {:?}", e).as_str())
         })?;
-        stmt.query_with(query_args).execute(&self.db).await.map_err(|e| {
+        stmt.query_with(query_args).execute(&mut **transaction).await.map_err(|e| {
             io_err(format!("Error executing SQL statement, maybe key ID not found in pre init keys database?: {:?}", e).as_str())
         })?;
+        if let Some(tx) = internal_transaction {
+            tx.commit().await.map_err(|e| {
+                io_err(format!("Error committing transaction: {:?}", e).as_str())
+            })?;
+        }
         Ok(())
     }
 
@@ -1285,7 +1341,7 @@ mod tests {
         };
         key_handler.add_preinit_qkd_key(key).await.unwrap();
         let key_id = 1; // As it's the first key, we can assume it's the ID
-        key_handler.delete_pre_init_key_with_id(key_id).await.unwrap();
+        key_handler.delete_pre_init_key_with_id(key_id, None).await.unwrap();
     }
 
     #[tokio::test]
