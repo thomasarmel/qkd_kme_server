@@ -21,7 +21,7 @@
     {
       "id": 1, // KME id of the other KME
       "key_directory_to_watch": "raw_keys/kme-1-2", // Quantum Key directory for communication between SAEs of KME 2 and KME 1
-      "inter_kme_bind_address": "127.0.0.1:13001", // Address of the other KME to connect to
+      "inter_kme_bind_address": "localhost:13001", // Address of the other KME to connect to
       // "ignore_system_proxy_settings" not set: default to false
       "https_client_authentication_certificate": "certs/inter_kmes/kme2-to-kme1.pfx", // Client cert to authenticate to the other KME
       "https_client_authentication_certificate_password": "password" // Password for the client cert (empty if none)
