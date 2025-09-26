@@ -192,6 +192,10 @@ This software will detect new files automatically in case you are doing QKD on-t
 
 You must generate SSL certificates for both SAE-to-KME and KME-to-KME communications (in the latter certificates are used only for authentication).
 
+---
+
+**Automatic certificate generation**
+
 You can use the [qkd_kme_server_certificates_generator](https://github.com/thomasarmel/qkd_kme_server_certificates_generator) that we provide to generate all certificates automatically from a configuration file.
 
 ```bash
@@ -201,6 +205,10 @@ cargo run --release -- your_config_file.json5
 ```
 
 Documentation for the configuration file is available in the [generator README](https://github.com/thomasarmel/qkd_kme_server_certificates_generator/blob/main/README.md).
+
+---
+
+**Manual certificate generation**
 
 Otherwise, if you prefer to do this manually, we give below an example of how to quickly generate all SSL certificates, using `openssl`.
 
