@@ -192,8 +192,17 @@ This software will detect new files automatically in case you are doing QKD on-t
 
 You must generate SSL certificates for both SAE-to-KME and KME-to-KME communications (in the latter certificates are used only for authentication).
 
-Here is an example of how to quickly generate all SSL certificates.
-If your adversary already has access to an efficient quantum computer (I don't know when you are reading this), you can use [Open Quantum Safe OpenSSL fork](https://openquantumsafe.org/applications/tls.html) to generate your certificates.
+You can use the [qkd_kme_server_certificates_generator](https://github.com/thomasarmel/qkd_kme_server_certificates_generator) that we provide to generate all certificates automatically from a configuration file.
+
+```bash
+git clone https://github.com/thomasarmel/qkd_kme_server_certificates_generator.git
+cd qkd_kme_server_certificates_generator
+cargo run --release -- your_config_file.json5
+```
+
+Documentation for the configuration file is available in the [generator README](https://github.com/thomasarmel/qkd_kme_server_certificates_generator/blob/main/README.md).
+
+Otherwise, if you prefer to do this manually, we give below an example of how to quickly generate all SSL certificates, using `openssl`.
 
 **KMEs' server certificates:**
 
