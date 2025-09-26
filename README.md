@@ -372,6 +372,8 @@ cargo build --release --target=x86_64-unknown-linux-musl
 
 ![ldd for statically linked Linux binary](assets/compile_static_linux.png)
 
+(If issues arise during compilation, please check the [TROUBLESHOOTING.md](TROUBLESHOOTING.md) file)
+
 # Troubleshooting
 
 Please check the file [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues / FAQ.

@@ -20,9 +20,9 @@ pub const REMOTE_KME_HOST_PORT: &'static str = "localhost:4000";
 pub fn setup() {
     let server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
         "127.0.0.1:3000",
-        "certs/zone1/CA-zone1.crt",
-        "certs/zone1/kme1.crt",
-        "certs/zone1/kme1.key",
+        "certs/kme-1-local-zone/ca.crt",
+        "certs/kme-1-local-zone/kme_server.crt",
+        "certs/kme-1-local-zone/kme_server.key",
     );
 
     let qkd_manager = QkdManager::new(":memory:", 1, &Some("Alice".to_string()));
@@ -55,9 +55,9 @@ pub fn setup() {
 pub fn setup_all_keys_inserted_at_once() {
     let server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
         "127.0.0.1:3000",
-        "certs/zone1/CA-zone1.crt",
-        "certs/zone1/kme1.crt",
-        "certs/zone1/kme1.key",
+        "certs/kme-1-local-zone/ca.crt",
+        "certs/kme-1-local-zone/kme_server.crt",
+        "certs/kme-1-local-zone/kme_server.key",
     );
 
     let qkd_manager = QkdManager::new(":memory:", 1, &Some("Alice".to_string()));
@@ -88,9 +88,9 @@ pub fn setup_all_keys_inserted_at_once() {
 pub fn setup_lot_of_stored_keys() {
     let server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
         "127.0.0.1:3000",
-        "certs/zone1/CA-zone1.crt",
-        "certs/zone1/kme1.crt",
-        "certs/zone1/kme1.key",
+        "certs/kme-1-local-zone/ca.crt",
+        "certs/kme-1-local-zone/kme_server.crt",
+        "certs/kme-1-local-zone/kme_server.key",
     );
 
     let qkd_manager = QkdManager::new(":memory:", 1, &Some("Alice".to_string()));
@@ -114,9 +114,9 @@ pub fn setup_lot_of_stored_keys() {
 pub fn setup_lot_of_stored_keys_inserted_at_once() {
     let server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
         "127.0.0.1:3000",
-        "certs/zone1/CA-zone1.crt",
-        "certs/zone1/kme1.crt",
-        "certs/zone1/kme1.key",
+        "certs/kme-1-local-zone/ca.crt",
+        "certs/kme-1-local-zone/kme_server.crt",
+        "certs/kme-1-local-zone/kme_server.key",
     );
 
     let qkd_manager = QkdManager::new(":memory:", 1, &Some("Alice".to_string()));
@@ -142,12 +142,12 @@ pub fn setup_lot_of_stored_keys_inserted_at_once() {
 
 pub fn setup_cert_auth_reqwest_client() -> reqwest::Client {
     #[cfg(not(target_os = "macos"))]
-    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/zone1/sae1.pfx";
+    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/kme-1-local-zone/client_1.pfx";
     #[cfg(target_os = "macos")]
-    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/zone1/sae1.pem";
+    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/kme-1-local-zone/client_1_cert.pem";
 
     #[cfg(not(target_os = "macos"))]
-    let client_cert_id = generate_reqwest_cert_identity_nativetls(SAE_AUTH_CLIENT_CERT_PATH, "");
+    let client_cert_id = generate_reqwest_cert_identity_nativetls(SAE_AUTH_CLIENT_CERT_PATH, "password");
     #[cfg(target_os = "macos")]
     let client_cert_id = generate_reqwest_cert_identity_rustls(SAE_AUTH_CLIENT_CERT_PATH);
     reqwest::Client::builder()
@@ -158,12 +158,12 @@ pub fn setup_cert_auth_reqwest_client() -> reqwest::Client {
 
 pub fn setup_cert_auth_reqwest_client_2() -> reqwest::Client {
     #[cfg(not(target_os = "macos"))]
-    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/zone1/sae2.pfx";
+    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/kme-1-local-zone/client_2.pfx";
     #[cfg(target_os = "macos")]
-    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/zone1/sae2.pem";
+    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/kme-1-local-zone/client_2_cert.pem";
 
     #[cfg(not(target_os = "macos"))]
-    let client_cert_id = generate_reqwest_cert_identity_nativetls(SAE_AUTH_CLIENT_CERT_PATH, "");
+    let client_cert_id = generate_reqwest_cert_identity_nativetls(SAE_AUTH_CLIENT_CERT_PATH, "password");
     #[cfg(target_os = "macos")]
     let client_cert_id = generate_reqwest_cert_identity_rustls(SAE_AUTH_CLIENT_CERT_PATH);
 
@@ -175,12 +175,12 @@ pub fn setup_cert_auth_reqwest_client_2() -> reqwest::Client {
 
 pub fn setup_cert_auth_reqwest_client_remote_kme() -> reqwest::Client {
     #[cfg(not(target_os = "macos"))]
-    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/zone2/sae3.pfx";
+    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/kme-2-local-zone/client_3.pfx";
     #[cfg(target_os = "macos")]
-    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/zone2/sae3.pem";
+    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/kme-2-local-zone/client_3_cert.pem";
 
     #[cfg(not(target_os = "macos"))]
-    let client_cert_id = generate_reqwest_cert_identity_nativetls(SAE_AUTH_CLIENT_CERT_PATH, "");
+    let client_cert_id = generate_reqwest_cert_identity_nativetls(SAE_AUTH_CLIENT_CERT_PATH, "password");
     #[cfg(target_os = "macos")]
     let client_cert_id = generate_reqwest_cert_identity_rustls(SAE_AUTH_CLIENT_CERT_PATH);
 
@@ -192,12 +192,12 @@ pub fn setup_cert_auth_reqwest_client_remote_kme() -> reqwest::Client {
 
 pub fn setup_cert_auth_reqwest_client_unregistered_sae() -> reqwest::Client {
     #[cfg(not(target_os = "macos"))]
-    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/zone1/sae2.pfx";
+    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/kme-1-local-zone/client_2.pfx";
     #[cfg(target_os = "macos")]
-    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/zone1/sae2.pem";
+    const SAE_AUTH_CLIENT_CERT_PATH: &'static str = "certs/kme-1-local-zone/client_2_cert.pem";
 
     #[cfg(not(target_os = "macos"))]
-    let client_cert_id = generate_reqwest_cert_identity_nativetls(SAE_AUTH_CLIENT_CERT_PATH, "");
+    let client_cert_id = generate_reqwest_cert_identity_nativetls(SAE_AUTH_CLIENT_CERT_PATH, "password");
     #[cfg(target_os = "macos")]
     let client_cert_id = generate_reqwest_cert_identity_rustls(SAE_AUTH_CLIENT_CERT_PATH);
 
@@ -226,39 +226,39 @@ pub fn setup_cert_auth_reqwest_bad_client() -> reqwest::Client {
 
 pub fn setup_2_kmes_network() {
     #[cfg(not(target_os = "macos"))]
-    const KME1_TO_KME2_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pfx";
+    const KME1_TO_KME2_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/kme1-to-kme2.pfx";
     #[cfg(target_os = "macos")]
-    const KME1_TO_KME2_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pem";
+    const KME1_TO_KME2_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/kme1-to-kme2.pem";
 
     #[cfg(not(target_os = "macos"))]
-    const KME2_TO_KME1_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/client-kme2-to-kme1.pfx";
+    const KME2_TO_KME1_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/kme2-to-kme1.pfx";
     #[cfg(target_os = "macos")]
-    const KME2_TO_KME1_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/client-kme2-to-kme1.pem";
+    const KME2_TO_KME1_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/kme2-to-kme1.pem";
 
     let kme1_internal_sae_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
         "127.0.0.1:3000",
-        "certs/zone1/CA-zone1.crt",
-        "certs/zone1/kme1.crt",
-        "certs/zone1/kme1.key",
+        "certs/kme-1-local-zone/ca.crt",
+        "certs/kme-1-local-zone/kme_server.crt",
+        "certs/kme-1-local-zone/kme_server.key",
     );
     let kme2_internal_sae_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
         "127.0.0.1:4000",
-        "certs/zone2/CA-zone2.crt",
-        "certs/zone2/kme2.crt",
-        "certs/zone2/kme2.key",
+        "certs/kme-2-local-zone/ca.crt",
+        "certs/kme-2-local-zone/kme_server.crt",
+        "certs/kme-2-local-zone/kme_server.key",
     );
 
     let kme1_external_inter_kmes_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
         "0.0.0.0:3001",
-        "certs/inter_kmes/root-ca-kme1.crt",
-        "certs/zone1/kme1.crt",
-        "certs/zone1/kme1.key",
+        "certs/inter_kmes/ca_kme1.crt",
+        "certs/inter_kmes/kme1_server.crt",
+        "certs/inter_kmes/kme1_server.key",
     );
     let kme2_external_inter_kmes_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
         "0.0.0.0:4001",
-        "certs/inter_kmes/root-ca-kme2.crt",
-        "certs/zone2/kme2.crt",
-        "certs/zone2/kme2.key",
+        "certs/inter_kmes/ca_kme2.crt",
+        "certs/inter_kmes/kme2_server.crt",
+        "certs/inter_kmes/kme2_server.key",
     );
 
     let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1, &Some("Alice".to_string())));
@@ -270,7 +270,7 @@ pub fn setup_2_kmes_network() {
                              2,
                              &None
     ).unwrap();
-    kme1_qkd_manager.add_kme_classical_net_info(2, "127.0.0.1:4001", KME1_TO_KME2_CERT_AUTH_PATH, "", true).unwrap();
+    kme1_qkd_manager.add_kme_classical_net_info(2, "127.0.0.1:4001", KME1_TO_KME2_CERT_AUTH_PATH, "password", true).unwrap();
     kme1_qkd_manager.add_pre_init_qkd_key(PreInitQkdKeyWrapper::new(
         2,
         b"this_is_secret_key_1_of_32_bytes",
@@ -289,7 +289,7 @@ pub fn setup_2_kmes_network() {
                              2,
                              &Some(vec![0x2d, 0x28, 0x6e, 0xc1, 0x77, 0x46, 0x5a, 0xb8, 0xdf, 0x00, 0x90, 0xdb, 0x04, 0x69, 0xa0, 0xab, 0x0a, 0x97, 0x38, 0x51])
     ).unwrap();
-    kme2_qkd_manager.add_kme_classical_net_info(1, "127.0.0.1:3001", KME2_TO_KME1_CERT_AUTH_PATH, "", true).unwrap();
+    kme2_qkd_manager.add_kme_classical_net_info(1, "127.0.0.1:3001", KME2_TO_KME1_CERT_AUTH_PATH, "password", true).unwrap();
     kme2_qkd_manager.add_pre_init_qkd_key(PreInitQkdKeyWrapper::new(
         1,
         b"this_is_secret_key_1_of_32_bytes",
@@ -319,39 +319,39 @@ pub fn setup_2_kmes_network() {
 
 pub fn setup_2_kmes_network_keys_not_sync() {
     #[cfg(not(target_os = "macos"))]
-    const KME1_TO_KME2_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pfx";
+    const KME1_TO_KME2_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/kme1-to-kme2.pfx";
     #[cfg(target_os = "macos")]
-    const KME1_TO_KME2_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pem";
+    const KME1_TO_KME2_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/kme1-to-kme2.pem";
 
     #[cfg(not(target_os = "macos"))]
-    const KME2_TO_KME1_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/client-kme2-to-kme1.pfx";
+    const KME2_TO_KME1_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/kme2-to-kme1.pfx";
     #[cfg(target_os = "macos")]
-    const KME2_TO_KME1_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/client-kme2-to-kme1.pem";
+    const KME2_TO_KME1_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/kme2-to-kme1.pem";
 
     let kme1_internal_sae_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
         "127.0.0.1:3000",
-        "certs/zone1/CA-zone1.crt",
-        "certs/zone1/kme1.crt",
-        "certs/zone1/kme1.key",
+        "certs/kme-1-local-zone/ca.crt",
+        "certs/kme-1-local-zone/kme_server.crt",
+        "certs/kme-1-local-zone/kme_server.key",
     );
     let kme2_internal_sae_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
         "127.0.0.1:4000",
-        "certs/zone2/CA-zone2.crt",
-        "certs/zone2/kme2.crt",
-        "certs/zone2/kme2.key",
+        "certs/kme-2-local-zone/ca.crt",
+        "certs/kme-2-local-zone/kme_server.crt",
+        "certs/kme-2-local-zone/kme_server.key",
     );
 
     let kme1_external_inter_kmes_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
         "0.0.0.0:3001",
-        "certs/inter_kmes/root-ca-kme1.crt",
-        "certs/zone1/kme1.crt",
-        "certs/zone1/kme1.key",
+        "certs/inter_kmes/ca_kme1.crt",
+        "certs/inter_kmes/kme1_server.crt",
+        "certs/inter_kmes/kme1_server.key",
     );
     let kme2_external_inter_kmes_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
         "0.0.0.0:4001",
-        "certs/inter_kmes/root-ca-kme2.crt",
-        "certs/zone2/kme2.crt",
-        "certs/zone2/kme2.key",
+        "certs/inter_kmes/ca_kme2.crt",
+        "certs/inter_kmes/kme2_server.crt",
+        "certs/inter_kmes/kme2_server.key",
     );
 
     let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1, &Some("Alice".to_string())));
@@ -363,7 +363,7 @@ pub fn setup_2_kmes_network_keys_not_sync() {
                              2,
                              &None
     ).unwrap();
-    kme1_qkd_manager.add_kme_classical_net_info(2, "127.0.0.1:4001", KME1_TO_KME2_CERT_AUTH_PATH, "", true).unwrap();
+    kme1_qkd_manager.add_kme_classical_net_info(2, "127.0.0.1:4001", KME1_TO_KME2_CERT_AUTH_PATH, "password", true).unwrap();
     kme1_qkd_manager.add_pre_init_qkd_key(PreInitQkdKeyWrapper::new(
         2,
         b"this_is_secret_key_1_of_32_bytes",
@@ -378,7 +378,7 @@ pub fn setup_2_kmes_network_keys_not_sync() {
                              2,
                              &Some(vec![0x2d, 0x28, 0x6e, 0xc1, 0x77, 0x46, 0x5a, 0xb8, 0xdf, 0x00, 0x90, 0xdb, 0x04, 0x69, 0xa0, 0xab, 0x0a, 0x97, 0x38, 0x51])
     ).unwrap();
-    kme2_qkd_manager.add_kme_classical_net_info(1, "127.0.0.1:3001", KME2_TO_KME1_CERT_AUTH_PATH, "", true).unwrap();
+    kme2_qkd_manager.add_kme_classical_net_info(1, "127.0.0.1:3001", KME2_TO_KME1_CERT_AUTH_PATH, "password", true).unwrap();
     kme2_qkd_manager.add_pre_init_qkd_key(PreInitQkdKeyWrapper::new(
         1,
         // Aie aie aie, this is not the same key :o
@@ -405,21 +405,21 @@ pub fn setup_2_kmes_network_keys_not_sync() {
 
 pub fn setup_2_kmes_network_1_kme_down() {
     #[cfg(not(target_os = "macos"))]
-    const KME1_TO_KME2_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pfx";
+    const KME1_TO_KME2_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/kme1-to-kme2.pfx";
     #[cfg(target_os = "macos")]
-    const KME1_TO_KME2_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pem";
+    const KME1_TO_KME2_CERT_AUTH_PATH: &'static str = "certs/inter_kmes/kme1-to-kme2.pem";
 
     let kme1_internal_sae_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
         "127.0.0.1:3000",
-        "certs/zone1/CA-zone1.crt",
-        "certs/zone1/kme1.crt",
-        "certs/zone1/kme1.key",
+        "certs/kme-1-local-zone/ca.crt",
+        "certs/kme-1-local-zone/kme_server.crt",
+        "certs/kme-1-local-zone/kme_server.key",
     );
     let kme1_external_inter_kmes_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
         "0.0.0.0:3001",
-        "certs/inter_kmes/root-ca-kme1.crt",
-        "certs/zone1/kme1.crt",
-        "certs/zone1/kme1.key",
+        "certs/inter_kmes/ca_kme1.crt",
+        "certs/inter_kmes/kme1_server.crt",
+        "certs/inter_kmes/kme1_server.key",
     );
 
     let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1, &Some("Alice".to_string())));
@@ -431,7 +431,7 @@ pub fn setup_2_kmes_network_1_kme_down() {
                              2,
                              &None
     ).unwrap();
-    kme1_qkd_manager.add_kme_classical_net_info(2, "127.0.0.1:4001", KME1_TO_KME2_CERT_AUTH_PATH, "", true).unwrap();
+    kme1_qkd_manager.add_kme_classical_net_info(2, "127.0.0.1:4001", KME1_TO_KME2_CERT_AUTH_PATH, "password", true).unwrap();
     kme1_qkd_manager.add_pre_init_qkd_key(PreInitQkdKeyWrapper::new(
         2,
         b"this_is_secret_key_1_of_32_bytes",
@@ -457,15 +457,15 @@ pub fn setup_2_kmes_network_1_kme_down() {
 pub fn setup_2_kmes_network_missing_conf() {
     let kme1_internal_sae_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
         "127.0.0.1:3000",
-        "certs/zone1/CA-zone1.crt",
-        "certs/zone1/kme1.crt",
-        "certs/zone1/kme1.key",
+        "certs/kme-1-local-zone/ca.crt",
+        "certs/kme-1-local-zone/kme_server.crt",
+        "certs/kme-1-local-zone/kme_server.key",
     );
     let kme1_external_inter_kmes_server = qkd_kme_server::server::auth_https_server::AuthHttpsServer::<InterKMEsRoutes>::new(
         "0.0.0.0:3001",
-        "certs/inter_kmes/root-ca-kme1.crt",
-        "certs/zone1/kme1.crt",
-        "certs/zone1/kme1.key",
+        "certs/inter_kmes/ca_kme1.crt",
+        "certs/inter_kmes/kme1_server.crt",
+        "certs/inter_kmes/kme1_server.key",
     );
 
     let kme1_qkd_manager = Arc::new(QkdManager::new(":memory:", 1, &Some("Alice".to_string())));

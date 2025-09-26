@@ -1,8 +1,0 @@
-[client]
-basicConstraints = CA:FALSE
-nsCertType = client, email
-nsComment = "Inter KME network client auth certificate"
-subjectKeyIdentifier = hash
-authorityKeyIdentifier = keyid,issuer
-keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
-extendedKeyUsage = clientAuth, emailProtection

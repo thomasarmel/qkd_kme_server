@@ -14,8 +14,8 @@ use crate::io_err;
 /// # Errors
 /// If the file cannot be opened, or the certificate(s) cannot be parsed
 pub(super) fn load_cert(filename: &str) -> Result<Vec<CertificateDer<'static>>, io::Error> {
-    let certfile = File::open(filename).map_err(|_| {
-        io_err("Cannot open server certificate file")
+    let certfile = File::open(filename).map_err(|e| {
+        io_err(format!("Cannot open server certificate file {}: {}", filename, e).as_str())
     })?;
     let mut reader = BufReader::new(certfile);
     let certs = rustls_pemfile::certs(&mut reader)
@@ -60,7 +60,7 @@ pub(super) fn load_pkey(filename: &str) -> Result<Vec<PrivateKeyDer<'static>>, i
 mod test {
     #[test]
     fn test_load_cert() {
-        const CERT_FILENAME: &'static str = "certs/zone1/kme1.crt";
+        const CERT_FILENAME: &'static str = "certs/inter_kmes/kme1_server.crt";
         let certs = super::load_cert(CERT_FILENAME).unwrap();
         assert_eq!(certs.len(), 1);
 
@@ -71,7 +71,7 @@ mod test {
 
     #[test]
     fn test_load_pkey() {
-        const PKEY_FILENAME: &'static str = "certs/zone1/kme1.key";
+        const PKEY_FILENAME: &'static str = "certs/inter_kmes/kme1_server.key";
         let keys = super::load_pkey(PKEY_FILENAME).unwrap();
         assert_eq!(keys.len(), 1);
 

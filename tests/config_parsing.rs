@@ -33,7 +33,7 @@ async fn test_key_transfer_from_file_config() {
     tokio::spawn(async move {
         launch_kme_from_config_file(CONFIG_FILE_PATH_KME2).await;
     });
-
+    
     let sae1_reqwest_client = common::setup_cert_auth_reqwest_client();
     let sae2_reqwest_client = common::setup_cert_auth_reqwest_client_remote_kme();
     let log_demo_reqwest_client = reqwest::Client::new();

@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "dev" ]
   pull_request:
     branches: [ "master" ]
 
@@ -49,6 +49,8 @@ jobs:
         run: cargo test --verbose
   build-ubuntu-static:
     runs-on: ubuntu-latest
+    env: # TODO remove once aws-lc-sys issue fixed
+      C_INCLUDE_PATH: "/usr/include"
     steps:
       - uses: actions/checkout@v3
       - name: Setup build cache
@@ -60,9 +62,11 @@ jobs:
             target
           key: ${{ runner.os }}-static-cargo-${{ hashFiles('**/Cargo.toml') }}
       - name: Install musl compilation tools
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools linux-libc-dev
       - name: Add static executable target
         run: rustup target add x86_64-unknown-linux-musl
+      - name: Tmp - Link asm directory # TODO remove once aws-lc-sys issue fixed
+        run: sudo ln -sf /usr/include/x86_64-linux-gnu/asm /usr/include/asm
       - name: Build
         run: cargo build --verbose --target=x86_64-unknown-linux-musl
       - name: Build release

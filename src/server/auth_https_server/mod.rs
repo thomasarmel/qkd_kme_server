@@ -157,7 +157,11 @@ impl<T: crate::routes::Routes> AuthHttpsServer<T> {
         let server_cert = load_cert(self.server_cert_path.as_str())?;
 
         // We retrieve the first key, as we only support one key per server
-        let server_key = load_pkey(self.server_key_path.as_str())?.remove(0);
+        let mut private_keys = load_pkey(self.server_key_path.as_str())?;
+        if private_keys.len() < 1 {
+            return Err(io_err("No private key found in server key file"));
+        }
+        let server_key = private_keys.remove(0);
 
         let config = ServerConfig::builder()
             .with_client_cert_verifier(client_verifier)
@@ -175,9 +179,9 @@ mod tests {
 
     #[test]
     fn test_get_ssl_config() {
-        const CA_CERT_FILENAME: &'static str = "certs/zone1/CA-zone1.crt";
-        const SERVER_CERT_FILENAME: &'static str = "certs/zone1/kme1.crt";
-        const SERVER_KEY_FILENAME: &'static str = "certs/zone1/kme1.key";
+        const CA_CERT_FILENAME: &'static str = "certs/kme-1-local-zone/ca.crt";
+        const SERVER_CERT_FILENAME: &'static str = "certs/kme-1-local-zone/kme_server.crt";
+        const SERVER_KEY_FILENAME: &'static str = "certs/kme-1-local-zone/kme_server.key";
         let server = super::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
             "127.0.0.1:3000",
             CA_CERT_FILENAME,
@@ -187,7 +191,7 @@ mod tests {
         let config = server.get_ssl_config();
         assert!(config.is_ok());
 
-        const CA_CERT_FILE_WRONG_FORMAT: &'static str = "certs/zone1/sae1.pfx";
+        const CA_CERT_FILE_WRONG_FORMAT: &'static str = "certs/kme-1-local-zone/client_1.pfx";
         let server = super::AuthHttpsServer::<EtsiSaeQkdRoutesV1>::new(
             "127.0.0.1:3000",
             CA_CERT_FILE_WRONG_FORMAT,

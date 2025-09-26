@@ -1411,9 +1411,9 @@ mod tests {
     #[tokio::test]
     async fn test_run() {
         #[cfg(not(target_os = "macos"))]
-        const KME1_TO_KME2_CLIENT_AUTH_CERT_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pfx";
+        const KME1_TO_KME2_CLIENT_AUTH_CERT_PATH: &'static str = "certs/inter_kmes/kme1-to-kme2.pfx";
         #[cfg(target_os = "macos")]
-        const KME1_TO_KME2_CLIENT_AUTH_CERT_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pem";
+        const KME1_TO_KME2_CLIENT_AUTH_CERT_PATH: &'static str = "certs/inter_kmes/kme1-to-kme2.pem";
 
         let (command_tx, command_channel_rx) = crossbeam_channel::unbounded();
         let (response_channel_tx, response_rx) = crossbeam_channel::unbounded();
@@ -1503,7 +1503,7 @@ mod tests {
         command_tx.send(super::QkdManagerCommand::AddKmeClassicalNetInfo(kme_id,
                                                                          String::from("test.fr:1234"),
                                                                          String::from(KME1_TO_KME2_CLIENT_AUTH_CERT_PATH),
-                                                                         String::from(""),
+                                                                         String::from("password"),
                                                                          true)).unwrap();
         let qkd_manager_response = response_rx.recv().unwrap();
         assert_eq!(qkd_manager_response, QkdManagerResponse::Ok);

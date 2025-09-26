@@ -111,20 +111,26 @@ mod test {
 
     #[test]
     fn test_context_with_cert() {
-        const CERT_FILENAME: &'static str = "certs/zone1/kme1.crt";
+        const CERT_FILENAME: &'static str = "certs/inter_kmes/kme1_server.crt";
         let certs = load_cert(CERT_FILENAME).unwrap();
         assert_eq!(certs.len(), 1);
         let context = super::RequestContext::new(Some(&certs[0]), crate::qkd_manager::QkdManager::new(":memory:", 1, &None)).unwrap();
         assert!(context.has_client_certificate());
         assert_eq!(context.get_client_certificate_cn().unwrap(), "localhost");
-        assert_eq!(context.get_client_certificate_serial_as_string().unwrap(), "70:f4:4f:56:0c:3f:27:d4:b2:11:a4:78:13:af:d0:3c:03:81:3b:8d");
-        assert_eq!(context.get_client_certificate_serial_as_raw().unwrap(), &[0x70, 0xf4, 0x4f, 0x56, 0x0c, 0x3f, 0x27, 0xd4, 0xb2, 0x11, 0xa4, 0x78, 0x13, 0xaf, 0xd0, 0x3c, 0x03, 0x81, 0x3b, 0x8d]);
+        let string_serial = context.get_client_certificate_serial_as_string().unwrap();
+        let raw_serial = context.get_client_certificate_serial_as_raw().unwrap();
+        let rebuilt = raw_serial
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(":");
+        assert_eq!(string_serial, rebuilt);
     }
 
 
     fn load_cert(filename: &str) -> Result<Vec<CertificateDer<'static>>, io::Error> {
-        let certfile = File::open(filename).map_err(|_| {
-            io_err("Cannot open server certificate file")
+        let certfile = File::open(filename).map_err(|e| {
+            io_err(format!("Cannot open server certificate file {}: {}", filename, e).as_str())
         })?;
         let mut reader = BufReader::new(certfile);
         let certs = rustls_pemfile::certs(&mut reader)

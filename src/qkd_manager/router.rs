@@ -101,8 +101,8 @@ mod tests {
         let mut qkd_router = QkdRouter::new();
         let kme_id = 1;
         let ip_domain_port = "test.fr:1234";
-        let client_cert_path = "certs/inter_kmes/client-kme1-to-kme2.pfx";
-        let client_cert_password = "";
+        let client_cert_path = "certs/inter_kmes/kme1-to-kme2.pfx";
+        let client_cert_password = "password";
 
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
         assert!(qkd_router.add_kme_to_ip_domain_port_association(kme_id, ip_domain_port, client_cert_path, client_cert_password, true).is_ok());
@@ -115,7 +115,7 @@ mod tests {
         let mut qkd_router = QkdRouter::new();
         let kme_id = 1;
         let ip_domain_port = "test.fr:1234";
-        let client_cert_path = "certs/inter_kmes/client-kme1-to-kme2.pem";
+        let client_cert_path = "certs/inter_kmes/kme1-to-kme2.pem";
         let client_cert_password = "";
 
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
@@ -128,7 +128,7 @@ mod tests {
         let mut qkd_router = QkdRouter::new();
         let kme_id = 1;
         let ip_domain_port = "test.fr:1234;invalid_data";
-        let client_cert_path = "certs/inter_kmes/client-kme1-to-kme2.pfx";
+        let client_cert_path = "certs/inter_kmes/kme1-to-kme2.pfx";
         let client_cert_password = "";
 
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());
@@ -193,7 +193,7 @@ mod tests {
         let mut qkd_router = QkdRouter::new();
         let kme_id = 1;
         let ip_domain_port = "test.fr:1234";
-        let client_cert_path = "certs/inter_kmes/client-kme1-to-kme2.pfx";
+        let client_cert_path = "certs/inter_kmes/kme1-to-kme2.pfx";
         let client_cert_password = "this is not the password";
 
         assert!(qkd_router.get_classical_connection_info_from_kme_id(kme_id).is_none());

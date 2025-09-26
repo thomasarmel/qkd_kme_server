@@ -797,13 +797,13 @@ mod test {
         const DB_URI: &'static str = ":memory:";
 
         #[cfg(not(target_os = "macos"))]
-        const KME1_TO_KME2_CLIENT_AUTH_CERT_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pfx";
+        const KME1_TO_KME2_CLIENT_AUTH_CERT_PATH: &'static str = "certs/inter_kmes/kme1-to-kme2.pfx";
         #[cfg(target_os = "macos")]
-        const KME1_TO_KME2_CLIENT_AUTH_CERT_PATH: &'static str = "certs/inter_kmes/client-kme1-to-kme2.pem";
+        const KME1_TO_KME2_CLIENT_AUTH_CERT_PATH: &'static str = "certs/inter_kmes/kme1-to-kme2.pem";
 
         let qkd_manager = super::QkdManager::new(DB_URI, 1, &Some("Alice".to_string()));
 
-        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234;bad_addr", KME1_TO_KME2_CLIENT_AUTH_CERT_PATH, "", true);
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234;bad_addr", KME1_TO_KME2_CLIENT_AUTH_CERT_PATH, "password", true);
         assert!(response.is_err());
         assert_eq!(response.err().unwrap(), QkdManagerResponse::Ko);
 
@@ -813,7 +813,7 @@ mod test {
 
         #[cfg(not(target_os = "macos"))]
         {
-        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "certs/inter_kmes/client-kme1-to-kme2.pfx", "bad_password", true);
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", "certs/inter_kmes/kme1-to-kme2.pfx", "bad_password", true);
         assert!(response.is_err());
         assert_eq!(response.err().unwrap(), QkdManagerResponse::Ko);
         }
@@ -822,7 +822,7 @@ mod test {
         assert!(response.is_err());
         assert_eq!(response.err().unwrap(), QkdManagerResponse::Ko);
 
-        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", KME1_TO_KME2_CLIENT_AUTH_CERT_PATH, "", true);
+        let response = qkd_manager.add_kme_classical_net_info(1, "test.fr:1234", KME1_TO_KME2_CLIENT_AUTH_CERT_PATH, "password", true);
         assert!(response.is_ok());
         assert_eq!(response.unwrap(), QkdManagerResponse::Ok);
     }

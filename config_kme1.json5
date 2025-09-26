@@ -7,16 +7,16 @@
     "key_directory_to_watch": "raw_keys/kme-1-1", // Quantum Key directory for SAEs belonging to this KME (only to be compliant with standard, as these SAEs can use public key cryptography directly)
     "saes_https_interface": {
       "listen_address": "0.0.0.0:13000", // Listening address for connections of SAEs belonging to this KME
-      "ca_client_cert_path": "certs/zone1/CA-zone1.crt", // CA cert to validate SAE client certs
-      "server_cert_path": "certs/zone1/kme1.crt", // KME server cert for SAE connections
-      "server_key_path": "certs/zone1/kme1.key" // KME server key for SAE connections
+      "ca_client_cert_path": "certs/kme-1-local-zone/ca.crt", // CA cert to validate SAE client certs
+      "server_cert_path": "certs/kme-1-local-zone/kme_server.crt", // KME server cert for SAE connections
+      "server_key_path": "certs/kme-1-local-zone/kme_server.key" // KME server key for SAE connections
     },
     "debugging_http_interface": "0.0.0.0:18080", // Optional HTTP debugging interface (unsecured, no auth)
     "kmes_https_interface": {
       "listen_address": "0.0.0.0:13001", // Listening address for inter-KME connections
-      "ca_client_cert_path": "certs/inter_kmes/root-ca-kme1.crt", // CA cert to validate inter-KME client certs
-      "server_cert_path": "certs/zone1/kme1.crt", // KME server cert for inter-KME connections
-      "server_key_path": "certs/zone1/kme1.key" // KME server key for inter-KME connections
+      "ca_client_cert_path": "certs/inter_kmes/ca_kme1.crt", // CA cert to validate inter-KME client certs
+      "server_cert_path": "certs/inter_kmes/kme1_server.crt", // KME server cert for inter-KME connections
+      "server_key_path": "certs/inter_kmes/kme1_server.key" // KME server key for inter-KME connections
     }
   },
   "other_kmes": [
@@ -25,8 +25,8 @@
       "key_directory_to_watch": "raw_keys/kme-1-2", // Quantum Key directory for communication between SAEs of KME 1 and KME 2
       "inter_kme_bind_address": "127.0.0.1:14001", // Address of the other KME to connect to
       "ignore_system_proxy_settings": true, // Ignore system proxy settings when connecting to the other KME. If not set, default to false
-      "https_client_authentication_certificate": "certs/inter_kmes/client-kme1-to-kme2.pfx", // Client cert to authenticate to the other KME
-      "https_client_authentication_certificate_password": "" // Password for the client cert (empty if none)
+      "https_client_authentication_certificate": "certs/inter_kmes/kme1-to-kme2.pfx", // Client cert to authenticate to the other KME
+      "https_client_authentication_certificate_password": "password" // Password for the client cert (empty if none)
     }
   ],
   "saes": [
