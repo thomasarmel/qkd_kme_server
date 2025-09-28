@@ -17,7 +17,7 @@ pub(crate) struct RequestListKeysIds {
     pub(crate) key_IDs: Vec<RequestKeyId>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 #[allow(non_snake_case)]
 pub(crate) struct MasterKeyRequestObj {
     pub(crate) number: Option<usize>

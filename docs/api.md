@@ -97,6 +97,51 @@ Or for multiple keys:
 }
 ```
 
+## `GET /api/v1/keys/{slave SAE id}/enc_keys`
+
+*This route should be called by the master SAE*
+
+Retrieve a key already exchanged between the master KME (the one responding) and the slave KME.
+
+It returns the key encoded in base64 and the key ID, that should be sent directly to the slave SAE in order to let it retrieve the key.
+
+By default, only one key is requested (no query param). You can
+request multiple keys by specifying the `number` field in the query parameters
+(**max 10**): `GET /api/v1/keys/{slave SAE id}/enc_keys?number=3`
+
+### Response example:
+
+```json
+{
+  "keys": [
+    {
+      "key_ID": "8844cba7-29e1-3251-a50a-25da13e65eea",
+      "key": "dGhpc19pc19zZWNyZXRfa2V5XzFfb2ZfMzJfYnl0ZXM="
+    }
+  ]
+}
+```
+
+Or for multiple keys:
+
+```json
+{
+  "keys": [
+      {
+          "key_ID": "9768257a-1c59-d255-a93d-d4bb1b693651",
+          "key": "zNK/zOIUDAFyuKRM0dSJLLZVYaDTuhzhAIACBgWABfY="
+      },
+      {
+          "key_ID": "80ccede4-05c9-815a-8e80-d151452bcb82",
+          "key": "/f8mwVeHSVMWjAAp5GGlSJDJSuB47Agvvo6ta66lIqQ="
+      },
+      {
+           "key_ID": "f6c4a667-23ea-7e58-b07d-95a568d140da",
+           "key": "6Db9BONohKETQqFPwIEYMS5h0GmskMickEWbowUQsqs="
+       }
+   ]
+}
+```
 
 ## `POST /api/v1/keys/{master SAE id}/dec_keys`
 

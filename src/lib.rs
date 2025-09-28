@@ -83,6 +83,9 @@ pub type SaeClientCertSerial = Vec<u8>;
 /// Type representing the number of keys requested by the SAE, bounded to [0, MAX_QKD_KEY_PER_KEY_ENC_REQUEST]
 pub type RequestedKeyCount = BoundedUsize<0, MAX_QKD_KEYS_PER_REQUEST>;
 
+/// Default number of keys to request if not specified in the request body
+pub const DEFAULT_KEY_REQUEST_COUNT: usize = 1;
+
 #[cfg(test)]
 mod test {
     #[test]

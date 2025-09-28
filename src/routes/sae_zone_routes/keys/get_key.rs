@@ -9,7 +9,7 @@ use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
 use log::{error, info, warn};
 use crate::qkd_manager::http_request_obj::MasterKeyRequestObj;
-use crate::{ensure_sae_id_format_type, RequestedKeyCount};
+use crate::{ensure_sae_id_format_type, RequestedKeyCount, DEFAULT_KEY_REQUEST_COUNT};
 use crate::ensure_client_certificate_serial;
 use crate::routes::sae_zone_routes::EtsiSaeQkdRoutesV1;
 
@@ -35,26 +35,16 @@ use crate::routes::sae_zone_routes::EtsiSaeQkdRoutesV1;
 // }
 // ```
 pub(in crate::routes) async fn route_get_key(rcx: &RequestContext<'_>, req: Request<body::Incoming>, slave_sae_id: &str) -> Result<Response<Full<Bytes>>, Infallible> {
-    const DEFAULT_KEY_REQUEST_COUNT: usize = 1;
     // Ensure the SAE ID is an integer
     let slave_sae_id_i64 = ensure_sae_id_format_type!(slave_sae_id);
 
     // Check if the client certificate serial is present
     let raw_client_certificate_serial = ensure_client_certificate_serial!(rcx);
 
-    let requested_keys_count = RequestedKeyCount::new(match req.into_body().collect().await {
-        Ok(bytes) => {
-                match serde_json::from_slice::<MasterKeyRequestObj>(&bytes.to_bytes()) {
-                    Ok(body) => body.number.unwrap_or(DEFAULT_KEY_REQUEST_COUNT),
-                    Err(_) => {
-                        DEFAULT_KEY_REQUEST_COUNT
-                    }
-                }
-            }
-        Err(_) => {
-            DEFAULT_KEY_REQUEST_COUNT
-        }
-    });
+    let request_params = extract_key_request_options(req).await;
+    let requested_keys_count = RequestedKeyCount::new(
+        request_params.number.unwrap_or(DEFAULT_KEY_REQUEST_COUNT)
+    );
 
     let requested_keys_count = match requested_keys_count {
         Some(count) => count,
@@ -97,6 +87,36 @@ pub(in crate::routes) async fn route_get_key(rcx: &RequestContext<'_>, req: Requ
         }
         _ => {
             EtsiSaeQkdRoutesV1::internal_server_error()
+        }
+    }
+}
+
+async fn extract_key_request_options(req: Request<body::Incoming>) -> MasterKeyRequestObj {
+    match req.method() {
+        &hyper::Method::POST => {
+            match req.into_body().collect().await {
+                Ok(bytes) => serde_json::from_slice::<MasterKeyRequestObj>(&bytes.to_bytes()).unwrap_or_else(|_| {
+                        MasterKeyRequestObj::default()
+                    }),
+                Err(_) => MasterKeyRequestObj::default(),
+            }
+        }
+        _ => {
+            match req.uri().query() {
+                None => MasterKeyRequestObj::default(),
+                Some(query_params) => {
+                    let params: std::collections::HashMap<_, _> = url::form_urlencoded::parse(query_params.as_bytes()).into_owned().collect();
+                    match params.get("number") {
+                        None => MasterKeyRequestObj::default(),
+                        Some(number_str) => {
+                            match number_str.parse::<usize>() {
+                                Ok(number) => MasterKeyRequestObj { number: Some(number) },
+                                Err(_) => MasterKeyRequestObj::default(),
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

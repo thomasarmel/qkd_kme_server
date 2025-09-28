@@ -25,6 +25,23 @@ async fn post_enc_keys() {
 
 #[tokio::test]
 #[serial]
+async fn get_enc_keys() {
+    const EXPECTED_BODY: &'static str = include_str!("data/enc_keys.json");
+    const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/enc_keys");
+
+    common::setup();
+    let reqwest_client = common::setup_cert_auth_reqwest_client();
+
+    let response = reqwest_client.get(REQUEST_URL).send().await;
+    assert!(response.is_ok());
+    let response = response.unwrap();
+    assert_eq!(response.status(), 200);
+    let response_body = response.text().await.unwrap();
+    assert_string_equal(&response_body, EXPECTED_BODY);
+}
+
+#[tokio::test]
+#[serial]
 async fn post_enc_keys_fuzz1() {
     const EXPECTED_BODY: &'static str = include_str!("data/enc_keys.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/enc_keys");
@@ -90,6 +107,28 @@ async fn post_enc_keys_multiple() {
         number: Some(11)
     };
     let response = reqwest_client.post(REQUEST_URL).json(&key_request_json_body).send().await;
+    assert!(response.is_ok());
+    let response = response.unwrap();
+    assert_eq!(response.status(), 400);
+}
+
+#[tokio::test]
+#[serial]
+async fn get_enc_keys_multiple() {
+    const EXPECTED_BODY_2_KEYS: &'static str = include_str!("data/enc_keys_multiple.json");
+    const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/enc_keys");
+
+    common::setup();
+    let reqwest_client = common::setup_cert_auth_reqwest_client();
+
+    let response = reqwest_client.get(concatcp!(REQUEST_URL, "?number=2")).send().await;
+    assert!(response.is_ok());
+    let response = response.unwrap();
+    assert_eq!(response.status(), 200);
+    let response_body = response.text().await.unwrap();
+    assert_string_equal(&response_body, EXPECTED_BODY_2_KEYS);
+
+    let response = reqwest_client.get(concatcp!(REQUEST_URL, "?number=11")).send().await;
     assert!(response.is_ok());
     let response = response.unwrap();
     assert_eq!(response.status(), 400);
