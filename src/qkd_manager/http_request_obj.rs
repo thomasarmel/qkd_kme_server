@@ -11,7 +11,7 @@ pub(crate) struct RequestKeyId {
 }
 
 /// List of key IDs requested by the slave SAE
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 #[allow(non_snake_case)]
 pub(crate) struct RequestListKeysIds {
     pub(crate) key_IDs: Vec<RequestKeyId>,

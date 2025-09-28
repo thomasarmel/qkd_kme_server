@@ -4,8 +4,8 @@
 
 Below are described the REST API routes exposed by the KME.
 
-For now, our implementation doesn't support 100% of the routes described in 
-the [official standard](etsi_qkd_standard_definition.pdf). This is 
+For now, our implementation doesn't support 100% of the features proposed by 
+the [official standard](etsi_qkd_standard_definition.pdf) (like extensions). This is 
 considered as future work. The main features are however implemented, and 
 should allow you to perform basic QKD key exchanges between SAEs.
 
@@ -49,9 +49,10 @@ ID of the calling SAE is automatically retrieved from the client certificate.
 
 *This route should be called by the master SAE*
 
-Retrieve a key already exchanged between the master KME (the one responding) and the slave KME.
+Retrieve one or multiple keys already exchanged between the master KME (the one responding) and the slave KME.
 
-It returns the key encoded in base64 and the key ID, that should be sent directly to the slave SAE in order to let it retrieve the key.
+It returns the keys encoded in base64 and the key ID, that should be sent 
+directly to the slave SAE in order to let it retrieve the key.
 
 By default, only one key is requested (empty request body). You can
 request multiple keys by specifying the `number` field in the JSON request
@@ -101,9 +102,11 @@ Or for multiple keys:
 
 *This route should be called by the master SAE*
 
-Retrieve a key already exchanged between the master KME (the one responding) and the slave KME.
+Retrieve one or multiple keys already exchanged between the master KME (the one 
+responding) and the slave KME.
 
-It returns the key encoded in base64 and the key ID, that should be sent directly to the slave SAE in order to let it retrieve the key.
+It returns the keys encoded in base64 and the key ID, that should be sent 
+directly to the slave SAE in order to let it retrieve the key.
 
 By default, only one key is requested (no query param). You can
 request multiple keys by specifying the `number` field in the query parameters
@@ -147,7 +150,8 @@ Or for multiple keys:
 
 *This route should be called by the slave SAE*
 
-Retrieve a key already exchanged between the master KME and the slave KME (the one responding), from the key id.
+Retrieve on or multiple keys already exchanged between the master KME and the 
+slave KME (the one responding), from the key id.
 
 Key id is the one sent by the master KME.
 
@@ -176,6 +180,30 @@ Key id is the one sent by the master KME.
       "key_ID": "8844cba7-29e1-3251-a50a-25da13e65eea",
       "key": "dGhpc19pc19zZWNyZXRfa2V5XzFfb2ZfMzJfYnl0ZXM="
     },
+    {
+      "key_ID": "8844cba7-29e1-3251-a50a-25da13e65eea",
+      "key": "dGhpc19pc19zZWNyZXRfa2V5XzFfb2ZfMzJfYnl0ZXM="
+    }
+  ]
+}
+```
+
+
+## `GET /api/v1/keys/{master SAE id}/dec_keys?key_ID={key UUID}`
+
+*This route should be called by the slave SAE*
+
+Retrieve a key already exchanged between the master KME and the slave KME (the one responding), from the key id.
+
+Key id is the one sent by the master KME.
+
+**Note**: Only one key can be requested at a time with this route. For multiple keys, use the `POST` version of this route.
+
+### Response example:
+
+```json
+{
+  "keys": [
     {
       "key_ID": "8844cba7-29e1-3251-a50a-25da13e65eea",
       "key": "dGhpc19pc19zZWNyZXRfa2V5XzFfb2ZfMzJfYnl0ZXM="

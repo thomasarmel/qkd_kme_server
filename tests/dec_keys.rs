@@ -1,7 +1,7 @@
 use const_format::concatcp;
 use reqwest::header::CONTENT_TYPE;
 use serial_test::serial;
-use crate::common::objects::MasterKeyRequestObj;
+use crate::common::objects::{MasterKeyRequestObj, ResponseQkdKeysList};
 use crate::common::util::assert_string_equal;
 
 mod common;
@@ -29,6 +29,33 @@ async fn post_dec_keys() {
     assert_eq!(response.status(), 200);
     let response_body = response.text().await.unwrap();
     assert_string_equal(&response_body, EXPECTED_BODY);
+}
+
+#[tokio::test]
+#[serial]
+async fn get_dec_keys() {
+    const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/dec_keys");
+    const INIT_POST_KEY_REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/enc_keys");
+
+    common::setup();
+    let reqwest_client = common::setup_cert_auth_reqwest_client();
+
+
+    let post_key_response = reqwest_client.post(INIT_POST_KEY_REQUEST_URL).send().await;
+    assert!(post_key_response.is_ok());
+    let post_key_response = post_key_response.unwrap();
+    assert_eq!(post_key_response.status(), 200);
+    let response_body = post_key_response.text().await.unwrap();
+    let response_body_obj: ResponseQkdKeysList = serde_json::from_str(&response_body).unwrap();
+    assert_eq!(response_body_obj.keys.len(), 1);
+
+    let response = reqwest_client.get(concatcp!(REQUEST_URL, "?key_ID=8844cba7-29e1-3251-a50a-25da13e65eea")).send().await;
+    assert!(response.is_ok());
+    let response = response.unwrap();
+    assert_eq!(response.status(), 200);
+    let response_body = response.text().await.unwrap();
+    let response_body_obj: ResponseQkdKeysList = serde_json::from_str(&response_body).unwrap();
+    assert_eq!(response_body_obj, response_body_obj);
 }
 
 #[tokio::test]

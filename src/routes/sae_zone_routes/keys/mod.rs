@@ -20,7 +20,7 @@ pub(in crate::routes) async fn key_handler(rcx: &RequestContext<'_>, req: Reques
         // Get key(s) from a master SAE (only 1 key for now)
         ([slave_sae_id, "enc_keys"], &hyper::Method::GET | &hyper::Method::POST) => get_key::route_get_key(rcx, req, slave_sae_id).await,
         // Get key(s) from a slave SAE, with ID provided by the master SAE
-        ([slave_sae_id, "dec_keys"], &hyper::Method::POST) => get_key_with_id::route_get_key_with_id(rcx, req, slave_sae_id).await,
+        ([slave_sae_id, "dec_keys"], &hyper::Method::GET | &hyper::Method::POST) => get_key_with_id::route_get_key_with_id(rcx, req, slave_sae_id).await,
         // Retrieve Shannon's entropy for all stored keys in KME database
         (["entropy", "total"], &hyper::Method::GET) => route_entropy::route_get_entropy_total(rcx, req).await,
         // Route not found

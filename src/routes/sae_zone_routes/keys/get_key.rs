@@ -14,8 +14,8 @@ use crate::ensure_client_certificate_serial;
 use crate::routes::sae_zone_routes::EtsiSaeQkdRoutesV1;
 
 
-/// Route to get key(s) from a master SAE (only 1 key for now)
-/// eg `POST /api/v1/keys/{slave SAE id integer}/enc_keys`
+/// Route to get key(s) from a master SAE
+/// eg `POST /api/v1/keys/{slave SAE id integer}/enc_keys` or `GET /api/v1/keys/{slave SAE id integer}/enc_keys[?number=n]`
 //
 // # Request body (optional)
 // ```json

@@ -1,10 +1,11 @@
 use std::convert::{identity, Infallible};
+use std::io;
 use http_body_util::Full;
 use hyper::{body, Request, Response};
 use hyper::body::Bytes;
-use log::error;
-use crate::{ensure_client_certificate_serial, ensure_sae_id_format_type};
-use crate::qkd_manager::http_request_obj::RequestListKeysIds;
+use log::{error, warn};
+use crate::{ensure_client_certificate_serial, ensure_sae_id_format_type, io_err};
+use crate::qkd_manager::http_request_obj::{RequestKeyId, RequestListKeysIds};
 use crate::qkd_manager::http_response_obj::HttpResponseBody;
 use crate::qkd_manager::QkdManagerResponse;
 use crate::routes::request_context::RequestContext;
@@ -12,7 +13,7 @@ use crate::routes::sae_zone_routes::EtsiSaeQkdRoutesV1;
 use http_body_util::BodyExt;
 
 /// Route to get key(s) from a slave SAE
-/// eg `POST /api/v1/keys/{master SAE id integer}/dec_keys`
+/// eg `POST /api/v1/keys/{master SAE id integer}/dec_keys` or `GET /api/v1/keys/{master SAE id integer}/dec_keys?key_ID=[uuid]`
 //
 // # Request
 // ```json
@@ -43,18 +44,10 @@ use http_body_util::BodyExt;
 // }
 // ```
 pub(in crate::routes) async fn route_get_key_with_id(rcx: &RequestContext<'_>, req: Request<body::Incoming>, master_sae_id: &str) -> Result<Response<Full<Bytes>>, Infallible> {
-    // Get the request body as bytes
-    let post_body_bytes = match req.into_body().collect().await {
-        Ok(bytes) => bytes.to_bytes(),
-        Err(_) => {
-            return EtsiSaeQkdRoutesV1::bad_request();
-        }
-    };
-
-    // Deserialize the request body to a RequestListKeysIds object
-    let request_list_keys_ids: RequestListKeysIds = match serde_json::from_slice(&post_body_bytes) {
-        Ok(request_list_keys_ids) => request_list_keys_ids,
-        Err(_) => {
+    let request_list_keys_ids = match extract_key_list_from_request(req).await {
+        Ok(key_ids) => key_ids,
+        Err(e) => {
+            warn!("Error extracting key IDs from request: {}", e);
             return EtsiSaeQkdRoutesV1::bad_request();
         }
     };
@@ -89,5 +82,34 @@ pub(in crate::routes) async fn route_get_key_with_id(rcx: &RequestContext<'_>, r
         _ => {
             EtsiSaeQkdRoutesV1::internal_server_error()
         }
+    }
+}
+
+async fn extract_key_list_from_request(req: Request<body::Incoming>) -> Result<RequestListKeysIds, io::Error> {
+    match req.method() {
+        &hyper::Method::POST => {
+            let post_body_bytes = match req.into_body().collect().await {
+                Ok(bytes) => bytes.to_bytes(),
+                Err(e) => Err(io_err(format!("Cannot read request body: {}", e).as_str()))?
+            };
+            match serde_json::from_slice(&post_body_bytes) {
+                Ok(request_list_keys_ids) => Ok(request_list_keys_ids),
+                Err(e) => Err(io_err(format!("Cannot parse request body as JSON: {}", e).as_str()))
+            }
+        }
+        _ => {
+            match req.uri().query() {
+                Some(query_params) => {
+                    let params: std::collections::HashMap<_, _> = url::form_urlencoded::parse(query_params.as_bytes()).into_owned().collect();
+                    match params.get("key_ID") {
+                        Some(key_id) => Ok(RequestListKeysIds {
+                            key_IDs: vec![RequestKeyId { key_ID: key_id.to_string() }]
+                        }),
+                        None => Ok(RequestListKeysIds::default())
+                    }
+                }
+                None => Ok(RequestListKeysIds::default())
+            }
+        },
     }
 }
