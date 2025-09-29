@@ -1,0 +1,66 @@
+{
+  "this_kme": {
+    "id": 2,
+    "db_uri": ":memory:",
+    "delete_key_file_after_read": false,
+    "key_directory_to_watch": "raw_keys/kme-2-2",
+    "saes_https_interface": {
+      "listen_address": "127.0.0.1:4000",
+      "ca_client_cert_path": "certs/kme-2-local-zone/ca.crt",
+      "server_cert_path": "certs/kme-2-local-zone/kme_server.crt",
+      "server_key_path": "certs/kme-2-local-zone/kme_server.key"
+    },
+    "kmes_https_interface": {
+      "listen_address": "0.0.0.0:4001",
+      "ca_client_cert_path": "certs/inter_kmes/ca_kme2.crt",
+      "server_cert_path": "certs/inter_kmes/kme2_server.crt",
+      "server_key_path": "certs/inter_kmes/kme2_server.key"
+    }
+  },
+  "other_kmes": [
+    {
+      "id": 1,
+      "key_directory_to_watch": "raw_keys/kme-1-2",
+      "inter_kme_bind_address": "127.0.0.1:3001",
+      "ignore_system_proxy_settings": true,
+      "https_client_authentication_certificate": "certs/inter_kmes/kme2-to-kme1.pfx",
+      "https_client_authentication_certificate_password": "password"
+    }
+  ],
+  "saes": [
+    {
+      "id": 1,
+      "kme_id": 1
+    },
+    {
+      "id": 2,
+      "kme_id": 1
+    },
+    {
+      "id": 3,
+      "kme_id": 2,
+      "https_client_certificate_serial": [
+        0x2d,
+        0x28,
+        0x6e,
+        0xc1,
+        0x77,
+        0x46,
+        0x5a,
+        0xb8,
+        0xdf,
+        0x0,
+        0x90,
+        0xdb,
+        0x4,
+        0x69,
+        0xa0,
+        0xab,
+        0xa,
+        0x97,
+        0x38,
+        0x51
+      ]
+    }
+  ]
+}

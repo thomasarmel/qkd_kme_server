@@ -48,3 +48,8 @@ openssl = {version = "0.10", features = ["vendored"]} # To allow static linking 
 serial_test = "3.2"
 const_format = "0.2"
 regex = "1.11"
+criterion = { version = "0.7", features = ["async_tokio", "html_reports"] }
+
+[[bench]]
+name = "enc_keys_remote"
+harness = false

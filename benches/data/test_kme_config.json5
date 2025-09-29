@@ -1,0 +1,89 @@
+{
+  "this_kme": {
+    "id": 1,
+    "nickname": "Alice",
+    "db_uri": ":memory:",
+    "delete_key_file_after_read": false,
+    "key_directory_to_watch": "raw_keys/kme-1-1",
+    "saes_https_interface": {
+      "listen_address": "127.0.0.1:3000",
+      "ca_client_cert_path": "certs/kme-1-local-zone/ca.crt",
+      "server_cert_path": "certs/kme-1-local-zone/kme_server.crt",
+      "server_key_path": "certs/kme-1-local-zone/kme_server.key"
+    },
+    "kmes_https_interface": {
+      "listen_address": "0.0.0.0:3001",
+      "ca_client_cert_path": "certs/inter_kmes/ca_kme1.crt",
+      "server_cert_path": "certs/inter_kmes/kme1_server.crt",
+      "server_key_path": "certs/inter_kmes/kme1_server.key"
+    },
+    "debugging_http_interface": "127.0.0.1:8080"
+  },
+  "other_kmes": [
+    {
+      "id": 2,
+      "key_directory_to_watch": "raw_keys/kme-1-2",
+      "inter_kme_bind_address": "127.0.0.1:4001",
+      "https_client_authentication_certificate": "certs/inter_kmes/kme1-to-kme2.pfx",
+      "https_client_authentication_certificate_password": "password"
+    }
+  ],
+  "saes": [
+    {
+      "id": 1,
+      "kme_id": 1,
+      "https_client_certificate_serial": [
+        0x70,
+        0xf4,
+        0x4f,
+        0x56,
+        0xc,
+        0x3f,
+        0x27,
+        0xd4,
+        0xb2,
+        0x11,
+        0xa4,
+        0x78,
+        0x13,
+        0xaf,
+        0xd0,
+        0x3c,
+        0x3,
+        0x81,
+        0x3b,
+        0x8e
+      ]
+    },
+    {
+      "id": 2,
+      "kme_id": 1,
+      "https_client_certificate_serial": [
+        0x70,
+        0xf4,
+        0x4f,
+        0x56,
+        0xc,
+        0x3f,
+        0x27,
+        0xd4,
+        0xb2,
+        0x11,
+        0xa4,
+        0x78,
+        0x13,
+        0xaf,
+        0xd0,
+        0x3c,
+        0x3,
+        0x81,
+        0x3b,
+        0x92
+      ]
+    },
+    {
+      "id": 3,
+      "kme_id": 2
+    }
+  ]
+}
