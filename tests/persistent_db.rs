@@ -6,7 +6,7 @@ use serial_test::serial;
 
 mod common;
 
-const WAIT_TIME_MS_FOR_SERVER_LAUNCH: u64 = 300;
+const WAIT_TIME_MS_FOR_SERVER_LAUNCH: u64 = 400;
 
 #[tokio::test]
 #[serial]

@@ -419,3 +419,8 @@ issn={2184-7711},
 }
 
 ```
+
+
+# Related resources
+
+This Cloud service will allow you to test the ETSI GS QKD API: https://qukaydee.com/pages/about
