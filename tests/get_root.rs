@@ -11,7 +11,7 @@ const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/");
 async fn get_root_directory_good_cert_auth() {
     const EXPECTED_BODY: &'static str = include_str!("data/not_found_body.json");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;
@@ -25,7 +25,7 @@ async fn get_root_directory_good_cert_auth() {
 #[tokio::test]
 #[serial]
 async fn get_root_directory_bad_cert_auth() {
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_bad_client();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;
@@ -35,7 +35,7 @@ async fn get_root_directory_bad_cert_auth() {
 #[tokio::test]
 #[serial]
 async fn get_root_directory_no_cert_auth() {
-    common::setup();
+    common::setup().await;
     let reqwest_client = reqwest::Client::builder().danger_accept_invalid_certs(true).build().unwrap();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;

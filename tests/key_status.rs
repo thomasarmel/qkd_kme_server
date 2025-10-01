@@ -10,7 +10,7 @@ async fn get_key_status() {
     const EXPECTED_BODY: &'static str = include_str!("data/key_status.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/status");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;
@@ -27,7 +27,7 @@ async fn get_key_status_lot_of_stored_keys() {
     const EXPECTED_BODY: &'static str = include_str!("data/key_status_lot_of_stored_keys.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/status");
 
-    common::setup_lot_of_stored_keys();
+    common::setup_lot_of_stored_keys().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;
@@ -44,7 +44,7 @@ async fn get_key_status_lot_of_stored_keys_all_at_once() {
     const EXPECTED_BODY: &'static str = include_str!("data/key_status_lot_of_stored_keys.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/status");
 
-    common::setup_lot_of_stored_keys_inserted_at_once();
+    common::setup_lot_of_stored_keys_inserted_at_once().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;

@@ -1,7 +1,7 @@
 use const_format::concatcp;
 use std::collections::HashMap;
 use serial_test::serial;
-use crate::common::objects::MasterKeyRequestObj;
+use crate::common::objects::{MasterKeyRequestObj, ResponseQkdKeysList};
 use crate::common::util::assert_string_equal;
 
 mod common;
@@ -9,10 +9,9 @@ mod common;
 #[tokio::test]
 #[serial]
 async fn post_enc_keys() {
-    const EXPECTED_BODY: &'static str = include_str!("data/enc_keys.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/enc_keys");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let response = reqwest_client.post(REQUEST_URL).send().await;
@@ -20,16 +19,16 @@ async fn post_enc_keys() {
     let response = response.unwrap();
     assert_eq!(response.status(), 200);
     let response_body = response.text().await.unwrap();
-    assert_string_equal(&response_body, EXPECTED_BODY);
+    let response_qkd_keys_list: ResponseQkdKeysList = serde_json::from_str(&response_body).unwrap();
+    assert_eq!(response_qkd_keys_list.keys.len(), 1);
 }
 
 #[tokio::test]
 #[serial]
 async fn get_enc_keys() {
-    const EXPECTED_BODY: &'static str = include_str!("data/enc_keys.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/enc_keys");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;
@@ -37,16 +36,16 @@ async fn get_enc_keys() {
     let response = response.unwrap();
     assert_eq!(response.status(), 200);
     let response_body = response.text().await.unwrap();
-    assert_string_equal(&response_body, EXPECTED_BODY);
+    let response_qkd_keys_list: ResponseQkdKeysList = serde_json::from_str(&response_body).unwrap();
+    assert_eq!(response_qkd_keys_list.keys.len(), 1);
 }
 
 #[tokio::test]
 #[serial]
 async fn post_enc_keys_fuzz1() {
-    const EXPECTED_BODY: &'static str = include_str!("data/enc_keys.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/enc_keys");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     // POST body = "null"
@@ -55,7 +54,8 @@ async fn post_enc_keys_fuzz1() {
     let response = response.unwrap();
     assert_eq!(response.status(), 200);
     let response_body = response.text().await.unwrap();
-    assert_string_equal(&response_body, EXPECTED_BODY);
+    let response_obj: ResponseQkdKeysList = serde_json::from_str(&response_body).unwrap();
+    assert_eq!(response_obj.keys.len(), 1);
 
     // POST body = "[]"
     let response = reqwest_client.post(REQUEST_URL).json(&Vec::<MasterKeyRequestObj>::new()).send().await;
@@ -63,16 +63,16 @@ async fn post_enc_keys_fuzz1() {
     let response = response.unwrap();
     assert_eq!(response.status(), 200);
     let response_body = response.text().await.unwrap();
-    assert_string_equal(&response_body, EXPECTED_BODY);
+    let response_obj: ResponseQkdKeysList = serde_json::from_str(&response_body).unwrap();
+    assert_eq!(response_obj.keys.len(), 1);
 }
 
 #[tokio::test]
 #[serial]
 async fn post_enc_keys_fuzz2() {
-    const EXPECTED_BODY: &'static str = include_str!("data/enc_keys.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/enc_keys");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     // POST body = "{}"
@@ -81,16 +81,16 @@ async fn post_enc_keys_fuzz2() {
     let response = response.unwrap();
     assert_eq!(response.status(), 200);
     let response_body = response.text().await.unwrap();
-    assert_string_equal(&response_body, EXPECTED_BODY);
+    let response_obj: ResponseQkdKeysList = serde_json::from_str(&response_body).unwrap();
+    assert_eq!(response_obj.keys.len(), 1);
 }
 
 #[tokio::test]
 #[serial]
 async fn post_enc_keys_multiple() {
-    const EXPECTED_BODY_2_KEYS: &'static str = include_str!("data/enc_keys_multiple.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/enc_keys");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let key_request_json_body = MasterKeyRequestObj {
@@ -101,7 +101,8 @@ async fn post_enc_keys_multiple() {
     let response = response.unwrap();
     assert_eq!(response.status(), 200);
     let response_body = response.text().await.unwrap();
-    assert_string_equal(&response_body, EXPECTED_BODY_2_KEYS);
+    let response_qkd_keys_list: ResponseQkdKeysList = serde_json::from_str(&response_body).unwrap();
+    assert_eq!(response_qkd_keys_list.keys.len(), 2);
 
     let key_request_json_body = MasterKeyRequestObj {
         number: Some(11)
@@ -115,10 +116,9 @@ async fn post_enc_keys_multiple() {
 #[tokio::test]
 #[serial]
 async fn get_enc_keys_multiple() {
-    const EXPECTED_BODY_2_KEYS: &'static str = include_str!("data/enc_keys_multiple.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/enc_keys");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let response = reqwest_client.get(concatcp!(REQUEST_URL, "?number=2")).send().await;
@@ -126,7 +126,8 @@ async fn get_enc_keys_multiple() {
     let response = response.unwrap();
     assert_eq!(response.status(), 200);
     let response_body = response.text().await.unwrap();
-    assert_string_equal(&response_body, EXPECTED_BODY_2_KEYS);
+    let response_qkd_keys_list: ResponseQkdKeysList = serde_json::from_str(&response_body).unwrap();
+    assert_eq!(response_qkd_keys_list.keys.len(), 2);
 
     let response = reqwest_client.get(concatcp!(REQUEST_URL, "?number=11")).send().await;
     assert!(response.is_ok());
@@ -137,10 +138,9 @@ async fn get_enc_keys_multiple() {
 #[tokio::test]
 #[serial]
 async fn post_enc_keys_not_enough() {
-    const EXPECTED_BODY_NOT_ENOUGH: &'static str = include_str!("data/enc_keys_not_enough.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/1/enc_keys");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let key_request_json_body = MasterKeyRequestObj {
@@ -151,7 +151,8 @@ async fn post_enc_keys_not_enough() {
     let response = response.unwrap();
     assert_eq!(response.status(), 200);
     let response_body = response.text().await.unwrap();
-    assert_string_equal(&response_body, EXPECTED_BODY_NOT_ENOUGH);
+    let response_qkd_keys_list: ResponseQkdKeysList = serde_json::from_str(&response_body).unwrap();
+    assert_eq!(response_qkd_keys_list.keys.len(), 3);
 }
 
 #[tokio::test]
@@ -160,7 +161,7 @@ async fn post_enc_keys_sae_not_found() {
     const EXPECTED_BODY: &'static str = include_str!("data/not_found_body.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/2/enc_keys");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let response = reqwest_client.post(REQUEST_URL).send().await;

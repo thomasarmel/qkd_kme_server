@@ -10,7 +10,7 @@ async fn get_sae_info_me() {
     const EXPECTED_BODY: &'static str = include_str!("data/sae_info_me.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/sae/info/me");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;
@@ -27,7 +27,7 @@ async fn get_sae_info_me_unregistered_sae() {
     const EXPECTED_BODY: &'static str = include_str!("data/not_found_body.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/sae/info/me");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client_unregistered_sae();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;

@@ -10,7 +10,7 @@ async fn get_total_entropy() {
     const EXPECTED_BODY: &'static str = include_str!("data/total_entropy.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/entropy/total");
 
-    common::setup();
+    common::setup().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;
@@ -27,7 +27,7 @@ async fn get_total_entropy_all_inserted_at_once() {
     const EXPECTED_BODY: &'static str = include_str!("data/total_entropy.json");
     const REQUEST_URL: &'static str = concatcp!("https://", common::HOST_PORT ,"/api/v1/keys/entropy/total");
 
-    common::setup_all_keys_inserted_at_once();
+    common::setup_all_keys_inserted_at_once().await;
     let reqwest_client = common::setup_cert_auth_reqwest_client();
 
     let response = reqwest_client.get(REQUEST_URL).send().await;

@@ -3,27 +3,30 @@
 
 mod logging_message;
 
-use std::convert::Infallible;
-use std::io;
-use std::ops::Deref;
-use std::sync::{Arc, Mutex};
+use crate::event_subscription::ImportantEventSubscriber;
+use crate::server::log_http_server::logging_message::LoggingMessage;
 use http_body_util::Full;
-use hyper::{Request, Response, StatusCode};
 use hyper::body::Bytes;
 use hyper::header::CONTENT_TYPE;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
+use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
+use std::convert::Infallible;
+use std::future::Future;
+use std::io;
+use std::ops::Deref;
+use std::pin::Pin;
+use std::sync::Arc;
 use tokio::net::TcpListener;
-use crate::event_subscription::ImportantEventSubscriber;
-use crate::server::log_http_server::logging_message::LoggingMessage;
+use tokio::sync::RwLock;
 
 /// HTTP logging server struct
 #[derive(Debug)]
 pub struct LoggingHttpServer {
     /// HTTP listen address, e.g. "0.0.0.0:8080"
     pub listen_addr: String,
-    received_log_messages: Arc<Mutex<Vec<LoggingMessage>>>,
+    received_log_messages: Arc<RwLock<Vec<LoggingMessage>>>,
 }
 
 impl LoggingHttpServer {
@@ -35,7 +38,7 @@ impl LoggingHttpServer {
     pub fn new(listen_addr: &str) -> Self {
         Self {
             listen_addr: listen_addr.to_string(),
-            received_log_messages: Arc::new(Mutex::new(Vec::new())),
+            received_log_messages: Arc::new(RwLock::new(Vec::new())),
         }
     }
     /// Run the HTTP server
@@ -68,12 +71,12 @@ impl LoggingHttpServer {
     }
 
     /// Called at each incoming request
-    async fn handle_incoming_request(request: Request<hyper::body::Incoming>, received_log_messages: Arc<Mutex<Vec<LoggingMessage>>>) -> Result<Response<Full<Bytes>>, Infallible> {
+    async fn handle_incoming_request(request: Request<hyper::body::Incoming>, received_log_messages: Arc<RwLock<Vec<LoggingMessage>>>) -> Result<Response<Full<Bytes>>, Infallible> {
         const INDEX_HTML_RESPONSE: &str = include_str!("index.html");
 
         let response_obj = match request.uri().path() {
             "/messages" => {
-                Self::generate_messages_http_json_response(&received_log_messages)
+                Self::generate_messages_http_json_response(&received_log_messages).await
             },
             _ => {
                 Response::new(Full::new(Bytes::from(INDEX_HTML_RESPONSE.to_string())))
@@ -83,14 +86,14 @@ impl LoggingHttpServer {
     }
 
     /// Generates JSON array HTTP response containing all received log messages, or HTTP error status if an error occurred
-    fn generate_messages_http_json_response(received_log_messages: &Arc<Mutex<Vec<LoggingMessage>>>) -> Response<Full<Bytes>> {
-        let received_log_messages = match received_log_messages.lock() {
-            Ok(received_log_messages) => received_log_messages,
+    async fn generate_messages_http_json_response(received_log_messages: &Arc<RwLock<Vec<LoggingMessage>>>) -> Response<Full<Bytes>> {
+        /*let received_log_messages = match received_log_messages.read().await {
+            Ok(messages) => messages,
             Err(_) => {
                 return Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Full::new(Bytes::from(String::from("Mutex lock error")))).unwrap();
             }
-        };
-        let response_str = match serde_json::to_string(&received_log_messages.deref()) {
+        };*/
+        let response_str = match serde_json::to_string(&received_log_messages.read().await.deref()) {
             Ok(response_str) => response_str,
             Err(_) => {
                 return Response::builder().status(StatusCode::INTERNAL_SERVER_ERROR).body(Full::new(Bytes::from(String::from("JSON serialization error")))).unwrap();
@@ -106,24 +109,24 @@ impl ImportantEventSubscriber for LoggingHttpServer {
     /// * `message` - The message to be displayed
     /// # Returns
     /// Result<(), io::Error> - Ok(()) if the message was successfully added, Err(io::Error) otherwise (mutex lock error)
-    fn notify(&self, message: &str) -> Result<(), io::Error> {
-        self.received_log_messages
-            .lock()
-            .map_err(|_|
-                io::Error::new(io::ErrorKind::Other, "Mutex lock error"
-                ))?
-            .push(LoggingMessage::new(message));
-        Ok(())
+    fn notify(&self, message: &str) -> Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send + '_>> {
+        let message = message.to_string();
+        Box::pin(async move {
+            self.received_log_messages
+                .write().await
+                .push(LoggingMessage::new(&message));
+            Ok(())
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use regex::Regex;
-    use serial_test::serial;
     use crate::event_subscription::ImportantEventSubscriber;
     use crate::server::log_http_server::LoggingHttpServer;
+    use regex::Regex;
+    use serial_test::serial;
+    use std::sync::Arc;
 
     #[tokio::test]
     #[serial]
@@ -144,8 +147,8 @@ mod tests {
         assert_eq!(get_messages_response.status(), 200);
         assert_eq!(get_messages_response.text().await.unwrap(), "[]");
 
-        server.notify("Hello").unwrap();
-        server.notify("World").unwrap();
+        server.notify("Hello").await.unwrap();
+        server.notify("World").await.unwrap();
 
         let get_messages_response = reqwest::get("http://127.0.0.1:8080/messages").await.unwrap();
         assert_eq!(get_messages_response.status(), 200);

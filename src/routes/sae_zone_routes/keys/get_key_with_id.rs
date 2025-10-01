@@ -60,7 +60,7 @@ pub(in crate::routes) async fn route_get_key_with_id(rcx: &RequestContext<'_>, r
 
     // Check if the client certificate serial is present
     let raw_client_certificate_serial = ensure_client_certificate_serial!(rcx);
-    match rcx.qkd_manager.get_qkd_keys_with_ids(master_sae_id_i64, &raw_client_certificate_serial, keys_uuids).unwrap_or_else(identity) {
+    match rcx.qkd_manager.get_qkd_keys_with_ids(master_sae_id_i64, &raw_client_certificate_serial, keys_uuids).await.unwrap_or_else(identity) {
         // Serialize the keys to JSON
         QkdManagerResponse::Keys(keys) => {
             let keys_json = match keys.to_json() {

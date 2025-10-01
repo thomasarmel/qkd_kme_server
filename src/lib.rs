@@ -62,6 +62,12 @@ pub const QKD_KEY_FILE_EXTENSION: &'static str = "cor";
 /// NOTE: This is a dangerous setting as it breaks the whole protocol security and should only be used for testing
 pub const DANGER_IGNORE_CERTS_INTER_KME_NETWORK_ENV_VARIABLE: &'static str = "QKD_KME_SERVER_DANGER_INTER_KME_IGNORE_CERT";
 
+/// Disable randomization when retrieving keys from the database, for testing purposes.
+/// The retrieved key will be determined by the order of insertion in the database.
+/// But the performance will be worse, as the server will have to manage race conditions.
+/// This should be set to "Y" to disable randomization.
+pub const DISABLE_KEY_RETRIEVAL_DATABASE_RANDOMIZATION_ENV_VARIABLE: &'static str = "DISABLE_KEY_RETRIEVAL_DATABASE_RANDOMIZATION";
+
 /// The value of any boolean environment variable to be considered as activated
 pub const ACTIVATED_ENV_VARIABLE_VALUE: &'static str = "Y";
 

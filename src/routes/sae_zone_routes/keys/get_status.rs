@@ -11,7 +11,7 @@ use crate::routes::sae_zone_routes::EtsiSaeQkdRoutesV1;
 
 /// Route to get the key status (how many keys are available etc.) from a master SAE
 /// eg GET /api/v1/keys/{slave SAE id integer}/status
-pub(in crate::routes) fn route_get_status(rcx: &RequestContext, _req: Request<body::Incoming>, slave_sae_id: &str) -> Result<Response<Full<Bytes>>, Infallible> {
+pub(in crate::routes) async fn route_get_status(rcx: &RequestContext<'_>, _req: Request<body::Incoming>, slave_sae_id: &str) -> Result<Response<Full<Bytes>>, Infallible> {
     // Check if the client certificate serial is present
     let raw_client_certificate = match rcx.get_client_certificate_serial_as_raw() {
         Ok(serial) => serial,
@@ -24,7 +24,7 @@ pub(in crate::routes) fn route_get_status(rcx: &RequestContext, _req: Request<bo
     let slave_sae_id_i64 = ensure_sae_id_format_type!(slave_sae_id);
 
     // Retrieve the key status from the QKD manager
-    match rcx.qkd_manager.get_qkd_key_status(&raw_client_certificate, slave_sae_id_i64).unwrap_or_else(identity) {
+    match rcx.qkd_manager.get_qkd_key_status(&raw_client_certificate, slave_sae_id_i64).await.unwrap_or_else(identity) {
         QkdManagerResponse::Status(key_status) => {
             // Serialize the key status to JSON
             let key_status_json = match key_status.to_json() {

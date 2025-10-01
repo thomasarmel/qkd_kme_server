@@ -39,12 +39,12 @@ async fn main() {
         &config.this_kme_config.kmes_https_interface.server_key_path
     );
 
-    let qkd_manager = QkdManager::from_config(&config).unwrap();
+    let qkd_manager = QkdManager::from_config(&config).await.unwrap();
 
     match config.this_kme_config.debugging_http_interface {
         Some(listen_addr) => {
             let logging_http_server = Arc::new(LoggingHttpServer::new(&listen_addr));
-            qkd_manager.add_important_event_subscriber(Arc::clone(&logging_http_server) as Arc<dyn ImportantEventSubscriber>).unwrap();
+            qkd_manager.add_important_event_subscriber(Arc::clone(&logging_http_server) as Arc<dyn ImportantEventSubscriber>).await.unwrap();
             select! {
                 x = inter_kme_https_server.run(&qkd_manager) => {
                     error!("Error running inter-KMEs HTTPS server: {:?}", x);

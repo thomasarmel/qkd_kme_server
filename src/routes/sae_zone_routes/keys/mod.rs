@@ -16,7 +16,7 @@ mod get_status;
 pub(in crate::routes) async fn key_handler(rcx: &RequestContext<'_>, req: Request<body::Incoming>, uri_segments: &[&str]) -> Result<Response<Full<Bytes>>, Infallible> {
     match (uri_segments, req.method()) {
         // Get the status of key(s) from a master SAE (how many keys are available etc.)
-        ([slave_sae_id, "status"], &hyper::Method::GET) => get_status::route_get_status(rcx, req, slave_sae_id),
+        ([slave_sae_id, "status"], &hyper::Method::GET) => get_status::route_get_status(rcx, req, slave_sae_id).await,
         // Get key(s) from a master SAE (only 1 key for now)
         ([slave_sae_id, "enc_keys"], &hyper::Method::GET | &hyper::Method::POST) => get_key::route_get_key(rcx, req, slave_sae_id).await,
         // Get key(s) from a slave SAE, with ID provided by the master SAE

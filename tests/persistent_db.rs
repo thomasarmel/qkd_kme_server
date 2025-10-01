@@ -6,6 +6,8 @@ use serial_test::serial;
 
 mod common;
 
+const WAIT_TIME_MS_FOR_SERVER_LAUNCH: u64 = 300;
+
 #[tokio::test]
 #[serial]
 #[ignore]
@@ -15,6 +17,7 @@ async fn test_sqlite_file() {
     tokio::spawn(async move {
         launch_kme_from_config_file(CONFIG_FILE_PATH_KME1).await;
     });
+    tokio::time::sleep(tokio::time::Duration::from_millis(WAIT_TIME_MS_FOR_SERVER_LAUNCH)).await;
     generic_persistency_test().await
 }
 
@@ -27,6 +30,7 @@ async fn test_postgres() {
     tokio::spawn(async move {
         launch_kme_from_config_file(CONFIG_FILE_PATH_KME1).await;
     });
+    tokio::time::sleep(tokio::time::Duration::from_millis(WAIT_TIME_MS_FOR_SERVER_LAUNCH)).await;
     generic_persistency_test().await
 }
 
@@ -39,6 +43,7 @@ async fn test_mysql() {
     tokio::spawn(async move {
         launch_kme_from_config_file(CONFIG_FILE_PATH_KME1).await;
     });
+    tokio::time::sleep(tokio::time::Duration::from_millis(WAIT_TIME_MS_FOR_SERVER_LAUNCH)).await;
     generic_persistency_test().await
 }
 
@@ -51,6 +56,7 @@ async fn test_mariadb() {
     tokio::spawn(async move {
         launch_kme_from_config_file(CONFIG_FILE_PATH_KME1).await;
     });
+    tokio::time::sleep(tokio::time::Duration::from_millis(WAIT_TIME_MS_FOR_SERVER_LAUNCH)).await;
     generic_persistency_test().await
 }
 

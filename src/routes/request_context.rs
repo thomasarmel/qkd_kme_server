@@ -100,21 +100,21 @@ mod test {
     use rustls_pki_types::CertificateDer;
     use crate::io_err;
 
-    #[test]
-    fn test_context_no_cert() {
-        let context = super::RequestContext::new(None, crate::qkd_manager::QkdManager::new(":memory:", 1, &None)).unwrap();
+    #[tokio::test]
+    async fn test_context_no_cert() {
+        let context = super::RequestContext::new(None, crate::qkd_manager::QkdManager::new(":memory:", 1, &None).await.unwrap()).unwrap();
         assert!(!context.has_client_certificate());
         assert!(context.get_client_certificate_cn().is_err());
         assert!(context.get_client_certificate_serial_as_string().is_err());
         assert!(context.get_client_certificate_serial_as_raw().is_err());
     }
 
-    #[test]
-    fn test_context_with_cert() {
+    #[tokio::test]
+    async fn test_context_with_cert() {
         const CERT_FILENAME: &'static str = "certs/inter_kmes/kme1_server.crt";
         let certs = load_cert(CERT_FILENAME).unwrap();
         assert_eq!(certs.len(), 1);
-        let context = super::RequestContext::new(Some(&certs[0]), crate::qkd_manager::QkdManager::new(":memory:", 1, &None)).unwrap();
+        let context = super::RequestContext::new(Some(&certs[0]), crate::qkd_manager::QkdManager::new(":memory:", 1, &None).await.unwrap()).unwrap();
         assert!(context.has_client_certificate());
         assert_eq!(context.get_client_certificate_cn().unwrap(), "localhost");
         let string_serial = context.get_client_certificate_serial_as_string().unwrap();

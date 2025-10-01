@@ -43,7 +43,7 @@ fn bench_enc_keys(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let client = common::setup_cert_auth_reqwest_client();
 
-    c.bench_function("10 GET enc_keys", |b| {
+    c.bench_function("5 GET enc_keys", |b| {
         b.to_async(&rt).iter(|| async {
             let futures = (0..5).map(|_| client.get(REQUEST_URL).send());
             let responses: Vec<_> = futures::future::join_all(futures).await;
