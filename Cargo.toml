@@ -2,7 +2,7 @@
 name = "qkd_kme_server"
 version = "0.1.0"
 edition = "2021"
-authors = ["Thomas Prevost <thomas.prevost@univ-cotedazur.fr>"]
+authors = ["Thomas Prevost <contact@thomasarmel.fr>"]
 description = "QKD Key Management Entity Server, following the ETSI GS QKD 014 standard"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
