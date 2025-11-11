@@ -11,10 +11,10 @@ description = "QKD Key Management Entity Server, following the ETSI GS QKD 014 s
 hyper = "1.7"
 http-body-util = "0.1"
 hyper-util = { version = "0.1", features = ["full"] }
-tokio = { version="1.47", features = ["full"] }
+tokio = { version="1.48", features = ["full"] }
 tokio-rustls = "0.26"
 rustls = "0.23"
-rustls-pki-types = "1.12"
+rustls-pki-types = "1.13"
 x509-parser = "0.18"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -46,7 +46,7 @@ openssl = {version = "0.10", features = ["vendored"]} # To allow static linking 
 [dev-dependencies]
 serial_test = "3.2"
 const_format = "0.2"
-regex = "1.11"
+regex = "1.12"
 criterion = { version = "0.7", features = ["async_tokio", "html_reports"] }
 
 [[bench]]
