@@ -35,7 +35,7 @@ async fn test_key_transfer_from_file_config() {
         launch_kme_from_config_file(CONFIG_FILE_PATH_KME2).await;
     });
 
-    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
 
     let sae1_reqwest_client = common::setup_cert_auth_reqwest_client();
     let sae2_reqwest_client = common::setup_cert_auth_reqwest_client_remote_kme();
