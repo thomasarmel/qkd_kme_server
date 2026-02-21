@@ -7,7 +7,7 @@ use crate::qkd_manager::http_response_obj::HttpResponseBody;
 use crate::routes::RequestContext;
 use http_body_util::{BodyExt, Full};
 use hyper::body::Bytes;
-use log::{error, info, warn};
+use log::{error, info};
 use crate::qkd_manager::http_request_obj::MasterKeyRequestObj;
 use crate::{ensure_sae_id_format_type, RequestedKeyCount, DEFAULT_KEY_REQUEST_COUNT};
 use crate::ensure_client_certificate_serial;
