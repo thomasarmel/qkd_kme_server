@@ -41,7 +41,13 @@ async fn test_key_transfer_from_file_config() {
     let sae2_reqwest_client = common::setup_cert_auth_reqwest_client_remote_kme();
     let log_demo_reqwest_client = reqwest::Client::new();
 
-    let log_index_response = log_demo_reqwest_client.get(LOG_DEMO_REQUEST_URL_INDEX).send().await.unwrap();
+    let log_index_response = match log_demo_reqwest_client.get(LOG_DEMO_REQUEST_URL_INDEX).send().await {
+        Ok(response) => response,
+        Err(error) => {
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+            log_demo_reqwest_client.get(LOG_DEMO_REQUEST_URL_INDEX).send().await.unwrap()
+        },
+    };
     assert_eq!(log_index_response.status(), 200);
     let log_data_response = log_demo_reqwest_client.get(LOG_DEMO_REQUEST_URL_JSON_DATA).send().await.unwrap();
     assert_eq!(log_data_response.status(), 200);
