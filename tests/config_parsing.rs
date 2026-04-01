@@ -43,7 +43,7 @@ async fn test_key_transfer_from_file_config() {
 
     let log_index_response = match log_demo_reqwest_client.get(LOG_DEMO_REQUEST_URL_INDEX).send().await {
         Ok(response) => response,
-        Err(error) => {
+        Err(_) => {
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
             log_demo_reqwest_client.get(LOG_DEMO_REQUEST_URL_INDEX).send().await.unwrap()
         },

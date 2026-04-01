@@ -63,10 +63,11 @@ Read QKD keys are stored inside a SQL database of your choice, among [supported 
 | Platform                       | Status                        |
 |--------------------------------|-------------------------------|
 | Linux Ubuntu 24.04 x86_64      | :white_check_mark:            |
-| Windows Server 2022 x86_64     | :white_check_mark:            |
+| Windows Server 2025 x86_64     | :white_check_mark:            |
 | MacOS 15 arm64                 | :white_check_mark:            |
+| Linux Ubuntu 24.04 RISCV64     | :white_check_mark:            |
 | Windows 11 Professional x86_64 | :negative_squared_cross_mark: |
-| FreeBSD 14 x86_64              | :negative_squared_cross_mark: |
+| FreeBSD 15 x86_64              | :negative_squared_cross_mark: |
 | All other computer platforms   | :interrobang:                 |
 
 
