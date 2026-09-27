@@ -13,12 +13,12 @@ jobs:
   persistent-database-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Set up test database Docker containers
         run: |
           docker compose -f test_database_services_docker_compose.yml up -d
       - name: Setup build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -34,9 +34,9 @@ jobs:
   build-ubuntu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Setup build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -50,9 +50,9 @@ jobs:
   build-ubuntu-riscv:
     runs-on: ubuntu-24.04-riscv
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Setup build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -68,9 +68,9 @@ jobs:
     env: # TODO remove once aws-lc-sys issue fixed
       C_INCLUDE_PATH: "/usr/include"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Setup build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -100,7 +100,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: disable-defender-monitoring
         run: |
           Set-MpPreference -DisableRealtimeMonitoring $true
@@ -110,7 +110,7 @@ jobs:
           Set-MpPreference -DisableIntrusionPreventionSystem $true
         shell: powershell
       - name: Setup build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -124,9 +124,9 @@ jobs:
   build-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Setup build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
