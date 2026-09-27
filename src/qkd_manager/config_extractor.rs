@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::qkd_manager::{PreInitQkdKeyWrapper, QkdManager};
 use crate::{io_err, KmeId, DEFAULT_SHOULD_IGNORE_SYSTEM_PROXY_INTER_KME, QKD_KEY_SIZE_BYTES};
-use log::error;
+use log::{error, info};
 use notify::event::{AccessKind, AccessMode};
 use notify::{EventKind, RecursiveMode, Watcher};
 use std::io;
@@ -38,14 +38,17 @@ impl ConfigExtractor {
         let mut dir_watchers = qkd_manager.dir_watcher.lock().await;
         let qkd_manager = Arc::clone(&qkd_manager);
         Self::extract_all_keys_from_dir(Arc::clone(&qkd_manager), kme_keys_dir, kme_id, delete_key_files_afterwards).await?;
+        let runtime_handle = tokio::runtime::Handle::current();
 
         let mut key_dir_watcher_callback = match notify::recommended_watcher(move |res: Result<notify::Event, notify::Error>| {
             match res {
                 Ok(event) => {
-                    if let EventKind::Access(AccessKind::Close(AccessMode::Write)) = event.kind {
-                        let event_path = match event.paths[0].to_str() {
+                    let file_is_ready = matches!(&event.kind, EventKind::Access(AccessKind::Close(AccessMode::Write)))
+                        || cfg!(target_os = "windows") && matches!(&event.kind, EventKind::Create(_));
+                    if file_is_ready {
+                        let event_path = match event.paths.first().and_then(|path| path.to_str()) {
                             None => {
-                                error!("Error converting path to string");
+                                error!("Watch event does not contain a valid path: {:?}", event.paths);
                                 return;
                             }
                             Some(p) => p
@@ -53,7 +56,7 @@ impl ConfigExtractor {
                         if Self::check_file_extension_qkd_keys(event_path) {
                             let qkd_manager = Arc::clone(&qkd_manager);
                             let event_path = event_path.to_string();
-                            tokio::spawn(async move {
+                            runtime_handle.spawn(async move {
                                 Self::extract_all_keys_from_file(qkd_manager, &event_path, kme_id, delete_key_files_afterwards).await.map_err(|e|
                                     error!("Error extracting keys from file: {:?}", e)
                                 ).unwrap_or(());
@@ -91,15 +94,29 @@ impl ConfigExtractor {
 
 
     async fn extract_all_keys_from_file(qkd_manager: Arc<QkdManager>, file_path: &str, other_kme_id: i64, delete_file_afterwards: bool) -> Result<(), io::Error> {
-        let key_file_metadata = std::fs::metadata(file_path).map_err(|e|
+        #[cfg(target_os = "windows")]
+        let file = {
+            use std::os::windows::fs::OpenOptionsExt;
+            const ERROR_SHARING_VIOLATION: i32 = 32;
+            loop {
+                match std::fs::OpenOptions::new().read(true).share_mode(0).open(file_path) {
+                    Ok(file) => break file,
+                    Err(e) if e.raw_os_error() == Some(ERROR_SHARING_VIOLATION) =>
+                        tokio::time::sleep(std::time::Duration::from_millis(10)).await,
+                    Err(e) => return Err(io_err(&format!("Cannot open file: {:?}", e))),
+                }
+            }
+        };
+        #[cfg(not(target_os = "windows"))]
+        let file = std::fs::File::open(file_path).map_err(|e|
+            io_err(&format!("Cannot open file: {:?}", e))
+        )?;
+        let key_file_metadata = file.metadata().map_err(|e|
             io_err(&format!("Cannot read file metadata: {:?}", e))
         )?;
         if !key_file_metadata.is_file() {
             return Err(io_err("Path is not a file"));
         }
-        let file = std::fs::File::open(file_path).map_err(|e|
-            io_err(&format!("Cannot open file: {:?}", e))
-        )?;
 
         let keys_count = key_file_metadata.len() / QKD_KEY_SIZE_BYTES as u64;
 
@@ -115,9 +132,11 @@ impl ConfigExtractor {
             )?;
             qkd_keys.push(qkd_key);
         }
+        drop(reader);
         qkd_manager.add_multiple_pre_init_qkd_keys(qkd_keys).await.map_err(|e|
             io_err(&format!("Cannot import QKD keys from file: {:?}", e))
         )?;
+        info!("Imported {} QKD keys from file: {}", keys_count, file_path);
         if delete_file_afterwards {
             std::fs::remove_file(file_path).map_err(|e|
                 io_err(&format!("Cannot delete file after reading: {:?}", e))
