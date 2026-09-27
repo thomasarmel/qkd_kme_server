@@ -7,6 +7,11 @@ services:
       POSTGRES_DB: qkd_db
       POSTGRES_USER: qkd_user
       POSTGRES_PASSWORD: qkd_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qkd_user -d qkd_db"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
   mysql:
     image: mysql:latest
     ports:
@@ -16,6 +21,11 @@ services:
       MYSQL_USER: qkd_user
       MYSQL_PASSWORD: qkd_password
       MYSQL_ROOT_PASSWORD: root_password
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -proot_password --silent"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
   mariadb:
     image: mariadb:latest
     ports:
@@ -25,3 +35,8 @@ services:
       MARIADB_USER: qkd_user
       MARIADB_PASSWORD: qkd_password
       MARIADB_ROOT_PASSWORD: root_password
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -u root -proot_password --silent"]
+      interval: 2s
+      timeout: 5s
+      retries: 30

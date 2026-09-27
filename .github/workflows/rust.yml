@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Set up test database Docker containers
         run: |
-          docker compose -f test_database_services_docker_compose.yml up -d
+          docker compose -f test_database_services_docker_compose.yml up -d --wait --wait-timeout 90
       - name: Setup build cache
         uses: actions/cache@v6
         with:
@@ -28,8 +28,9 @@ jobs:
       - name: Build
         run: cargo build --verbose
       - name: Run persistent database tests
-        run: cargo test -- --ignored
+        run: cargo test --test persistent_db -- --ignored
       - name: Tear down test database Docker containers
+        if: always()
         run: docker compose -f test_database_services_docker_compose.yml down
   build-ubuntu:
     runs-on: ubuntu-latest

@@ -3,10 +3,57 @@ use crate::common::objects::{RequestKeyId, RequestListKeysIds, ResponseQkdKeysLi
 use const_format::concatcp;
 use hyper::header::CONTENT_TYPE;
 use serial_test::serial;
+use tokio::net::TcpStream;
+use tokio::task::JoinHandle;
+use tokio::time::{sleep, Duration, Instant};
 
 mod common;
 
-const WAIT_TIME_MS_FOR_SERVER_LAUNCH: u64 = 400;
+const SERVER_START_TIMEOUT: Duration = Duration::from_secs(10);
+const SERVER_START_RETRY_INTERVAL: Duration = Duration::from_millis(50);
+
+struct ServerGuard(JoinHandle<()>);
+
+impl ServerGuard {
+    async fn shutdown(mut self) {
+        self.0.abort();
+        let _ = (&mut self.0).await;
+    }
+}
+
+impl Drop for ServerGuard {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+async fn run_persistency_test(config_file_path: &'static str) {
+    let server = ServerGuard(tokio::spawn(async move {
+        launch_kme_from_config_file(config_file_path).await;
+    }));
+
+    wait_for_server(&server).await;
+    generic_persistency_test().await;
+    server.shutdown().await;
+}
+
+async fn wait_for_server(server: &ServerGuard) {
+    let deadline = Instant::now() + SERVER_START_TIMEOUT;
+
+    loop {
+        assert!(!server.0.is_finished(), "KME server stopped during startup");
+
+        if TcpStream::connect(common::HOST_PORT).await.is_ok() {
+            return;
+        }
+
+        assert!(
+            Instant::now() < deadline,
+            "KME server did not start within {SERVER_START_TIMEOUT:?}"
+        );
+        sleep(SERVER_START_RETRY_INTERVAL).await;
+    }
+}
 
 #[tokio::test]
 #[serial]
@@ -14,11 +61,7 @@ const WAIT_TIME_MS_FOR_SERVER_LAUNCH: u64 = 400;
 async fn test_sqlite_file() {
     const CONFIG_FILE_PATH_KME1: &'static str = "tests/data/test_kme_config_sqlite.json5";
 
-    tokio::spawn(async move {
-        launch_kme_from_config_file(CONFIG_FILE_PATH_KME1).await;
-    });
-    tokio::time::sleep(tokio::time::Duration::from_millis(WAIT_TIME_MS_FOR_SERVER_LAUNCH)).await;
-    generic_persistency_test().await
+    run_persistency_test(CONFIG_FILE_PATH_KME1).await;
 }
 
 #[tokio::test]
@@ -27,11 +70,7 @@ async fn test_sqlite_file() {
 async fn test_postgres() {
     const CONFIG_FILE_PATH_KME1: &'static str = "tests/data/test_kme_config_postgres.json5";
 
-    tokio::spawn(async move {
-        launch_kme_from_config_file(CONFIG_FILE_PATH_KME1).await;
-    });
-    tokio::time::sleep(tokio::time::Duration::from_millis(WAIT_TIME_MS_FOR_SERVER_LAUNCH)).await;
-    generic_persistency_test().await
+    run_persistency_test(CONFIG_FILE_PATH_KME1).await;
 }
 
 #[tokio::test]
@@ -40,11 +79,7 @@ async fn test_postgres() {
 async fn test_mysql() {
     const CONFIG_FILE_PATH_KME1: &'static str = "tests/data/test_kme_config_mysql.json5";
 
-    tokio::spawn(async move {
-        launch_kme_from_config_file(CONFIG_FILE_PATH_KME1).await;
-    });
-    tokio::time::sleep(tokio::time::Duration::from_millis(WAIT_TIME_MS_FOR_SERVER_LAUNCH)).await;
-    generic_persistency_test().await
+    run_persistency_test(CONFIG_FILE_PATH_KME1).await;
 }
 
 #[tokio::test]
@@ -53,11 +88,7 @@ async fn test_mysql() {
 async fn test_mariadb() {
     const CONFIG_FILE_PATH_KME1: &'static str = "tests/data/test_kme_config_mariadb.json5";
 
-    tokio::spawn(async move {
-        launch_kme_from_config_file(CONFIG_FILE_PATH_KME1).await;
-    });
-    tokio::time::sleep(tokio::time::Duration::from_millis(WAIT_TIME_MS_FOR_SERVER_LAUNCH)).await;
-    generic_persistency_test().await
+    run_persistency_test(CONFIG_FILE_PATH_KME1).await;
 }
 
 async fn generic_persistency_test() {
