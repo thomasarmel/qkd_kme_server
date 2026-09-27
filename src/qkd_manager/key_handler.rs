@@ -12,13 +12,14 @@ use futures::future::join_all;
 use futures::{TryFutureExt, TryStreamExt};
 use log::{error, info, warn};
 use sqlx::any::{AnyArguments, AnyPoolOptions};
-use sqlx::{Arguments, Execute, Executor, QueryBuilder, Row, Statement, Transaction};
+use sqlx::{Arguments, Executor, QueryBuilder, Row, Statement, Transaction};
 use sqlx_core::any::Any;
 use std::cmp::PartialEq;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::{io, vec};
 use sqlx_core::HashMap;
+use sqlx_core::sql_str::{AssertSqlSafe, SqlSafeStr};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Bytes;
 use x509_parser::nom::AsBytes;
@@ -287,8 +288,8 @@ impl KeyHandler {
                 .push_bind(key_bytes)
                 .push_bind(other_kme_id);
         });
-        let mut query = qb.build();
-        let query_sql = query.sql();
+        let query_sql_str = qb.sql();
+        let query_sql = query_sql_str.as_str();
         let mut sql_modified_for_postgres = String::with_capacity(query_sql.len());
 
         if self.dbms_type == DbmsType::Postgres {
@@ -302,15 +303,18 @@ impl KeyHandler {
                     sql_modified_for_postgres.push(ch);
                 }
             }
-            query = sqlx::query(&sql_modified_for_postgres);
+        }
+
+        let mut query = qb.build();
+
+        if self.dbms_type == DbmsType::Postgres {
+            query = sqlx::query(AssertSqlSafe(sql_modified_for_postgres).into_sql_str());
             for (uuid_str, key_bytes, other_kme_id) in pre_init_keys_transformed {
                 query = query.bind(uuid_str)
                     .bind(key_bytes)
                     .bind(other_kme_id);
             }
         }
-
-
 
         query.execute(&self.db).await.map_err(|e| {
             error!("Error executing SQL statement: {:?}", e);
@@ -411,9 +415,8 @@ impl KeyHandler {
             fetch_preinit_qb.push(" LIMIT ");
             fetch_preinit_qb.push_bind(key_count as i64);
 
-            let mut built_fetch_preinit_qb = fetch_preinit_qb.build();
-
-            let query_sql = built_fetch_preinit_qb.sql();
+            let query_sql_str = fetch_preinit_qb.sql();
+            let query_sql = query_sql_str.as_str();
             let mut sql_modified_for_postgres = String::with_capacity(query_sql.len());
 
             if self.dbms_type == DbmsType::Postgres {
@@ -427,7 +430,12 @@ impl KeyHandler {
                         sql_modified_for_postgres.push(ch);
                     }
                 }
-                built_fetch_preinit_qb = sqlx::query(&sql_modified_for_postgres);
+            }
+
+            let mut built_fetch_preinit_qb = fetch_preinit_qb.build();
+
+            if self.dbms_type == DbmsType::Postgres {
+                built_fetch_preinit_qb = sqlx::query(AssertSqlSafe(sql_modified_for_postgres).into_sql_str());
                 built_fetch_preinit_qb = built_fetch_preinit_qb.bind(target_kme_id);
                 if !blocked_key_ids.is_empty() {
                     for id in blocked_key_ids.iter() {
@@ -919,7 +927,7 @@ impl KeyHandler {
 #[macro_export]
 macro_rules! ensure_prepared_statement_ok {
     ($sql_connection:expr, $statement:expr) => {
-        $sql_connection.prepare($statement).await.map_err(|e| {
+        $sql_connection.prepare(AssertSqlSafe($statement).into_sql_str()).await.map_err(|e| {
             error!("Error preparing SQL statement: {:?}", e);
             QkdManagerResponse::Ko
         })

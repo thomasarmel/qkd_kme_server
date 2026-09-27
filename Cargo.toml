@@ -8,19 +8,19 @@ description = "QKD Key Management Entity Server, following the ETSI GS QKD 014 s
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hyper = "1.8"
+hyper = "1.11"
 http-body-util = "0.1"
 hyper-util = { version = "0.1", features = ["full"] }
-tokio = { version="1.49", features = ["full"] }
+tokio = { version="1.53", features = ["full"] }
 tokio-rustls = "0.26"
-rustls-pki-types = "1.14"
+rustls-pki-types = "1.15"
 x509-parser = "0.18"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_json5 = "0.2"
-sha1 = "0.10"
-uuid = "1.21"
-base64 = "0.22"
+sha1 = "0.11"
+uuid = "1.26"
+base64 = "0.23"
 rustls-pemfile = "2.2"
 log = "0.4"
 simple_logger = "5.2"
@@ -28,10 +28,10 @@ notify = "8.2"
 url = "2.5"
 chrono = "0.4"
 bounded-integer = "0.6"
-sqlx = {version = "0.8", features = ["all-databases", "runtime-tokio"]}
+sqlx = {version = "0.9", features = ["all-databases", "runtime-tokio"]}
 futures = "0.3"
 uriparse = "0.6"
-sqlx-core = "0.8"
+sqlx-core = "0.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 reqwest = { version = "0.13", features = ["rustls", "json"], default-features = false }
@@ -48,10 +48,10 @@ openssl = {version = "0.10", features = ["vendored"]} # To allow static linking 
 windows = { version = "0.62", features = ["Win32_Foundation"] }
 
 [dev-dependencies]
-serial_test = "3.3"
+serial_test = "4.0"
 const_format = "0.2"
-regex = "1.12"
-criterion = { version = "0.7", features = ["async_tokio", "html_reports"] }
+regex = "1.13"
+criterion = { version = "0.8", features = ["async_tokio", "html_reports"] }
 
 [[bench]]
 name = "enc_keys_remote"
