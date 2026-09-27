@@ -8,6 +8,8 @@ use std::io;
 use std::io::{BufReader, Read};
 use std::path::Path;
 use std::sync::Arc;
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::ERROR_SHARING_VIOLATION;
 
 pub(super) struct ConfigExtractor {}
 
@@ -97,11 +99,10 @@ impl ConfigExtractor {
         #[cfg(target_os = "windows")]
         let file = {
             use std::os::windows::fs::OpenOptionsExt;
-            const ERROR_SHARING_VIOLATION: i32 = 32;
             loop {
                 match std::fs::OpenOptions::new().read(true).share_mode(0).open(file_path) {
                     Ok(file) => break file,
-                    Err(e) if e.raw_os_error() == Some(ERROR_SHARING_VIOLATION) =>
+                    Err(e) if e.raw_os_error() == Some(ERROR_SHARING_VIOLATION.0 as i32) =>
                         tokio::time::sleep(std::time::Duration::from_millis(10)).await,
                     Err(e) => return Err(io_err(&format!("Cannot open file: {:?}", e))),
                 }
