@@ -166,8 +166,8 @@ impl<T: crate::routes::Routes> AuthHttpsServer<T> {
         let config = ServerConfig::builder()
             .with_client_cert_verifier(client_verifier)
             .with_single_cert(server_cert, server_key)
-            .map_err(|_| {
-                io_err("Error building server configuration")
+            .map_err(|e| {
+                io_err(&format!("Error building server configuration: {:?}", e))
             })?;
         Ok(config)
     }
