@@ -99,7 +99,13 @@ impl<T: crate::routes::Routes> AuthHttpsServer<T> {
 
         loop {
             info!("[KME{}] Waiting for incoming connection on port {}...", qkd_manager.kme_id, addr.port());
-            let Ok(stream) = tls_acceptor.accept(socket.accept().await?.0).await else {
+            let tcp_stream = socket.accept().await?.0;
+            // Without TCP_NODELAY, Nagle's algorithm holds the last segment of
+            // a response until the client's delayed ACK (~40 ms on Linux).
+            if let Err(e) = tcp_stream.set_nodelay(true) {
+                warn!("Cannot set TCP_NODELAY: {}", e);
+            }
+            let Ok(stream) = tls_acceptor.accept(tcp_stream).await else {
                 warn!("Error accepting connection, maybe client certificate is missing?");
                 continue;
             };
